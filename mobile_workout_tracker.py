@@ -9,10 +9,6 @@ EDIT_PASSWORD = "1"
 
 # ---------------- WORKOUT PLAN ----------------
 workout_plan = {
-    f"Day {i}": [] for i in range(1, 8) # Placeholder for logic, using your defined plans below
-}
-# (Keeping your original workout_plan dictionary structure)
-workout_plan = {
     "Day 1": ["Flat Bench Press","Incline Bench Press","Cable Flies","Cable Tricep Extensions","Skull Crushers","Dips","Push Ups","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
     "Day 2": ["Straight Bar Deadlift","Seated Rows","Lat Pull Downs","One Arm Dumbbell Rows","DB Bicep Curl","Hammer Curls","Concentration Curls","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
     "Day 3": ["Squat","Leg Extensions","Leg Curls","Calf Raises","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
@@ -72,16 +68,11 @@ saved_date_row = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "
 if not saved_date_row.empty:
     calculated_date = saved_date_row.iloc[0]
 else:
-    # Anchor to the absolute closest previous entry in the entire log
     if not log_df.empty:
-        # Create a absolute position for comparison (Week 1 Day 1 = 1, Week 2 Day 1 = 8)
         log_copy = log_df.copy()
         log_copy["DayNum"] = log_copy["Day"].str.extract('(\d+)').astype(int)
         log_copy["AbsPos"] = ((log_copy["Week"] - 1) * 7) + log_copy["DayNum"]
-        
         current_abs_pos = ((week - 1) * 7) + current_day_num
-        
-        # Find the nearest anchor regardless of week
         log_copy = log_copy.sort_values("AbsPos", ascending=False)
         prev_anchors = log_copy[log_copy["AbsPos"] < current_abs_pos]
         
@@ -95,42 +86,32 @@ else:
 
 day_date = st.date_input("Workout Date", value=calculated_date, key=f"date_picker_{week}_{day}", disabled=not can_edit)
 
-if st.button("💾 Lock & Sync ALL Future", disabled=not can_edit):
+# --- DYNAMIC BUTTON LABEL (SAVE vs CHECKMARK) ---
+already_synced = not saved_date_row.empty and saved_date_row.iloc[0] == day_date
+button_label = "✅ Schedule Synced" if already_synced else "💾 Lock & Sync ALL Future"
+
+if st.button(button_label, disabled=not can_edit or already_synced):
     current_abs_pos = ((week - 1) * 7) + current_day_num
-    
-    # 1. Prepare to update the entire log
-    updated_rows = 0
-    
-    # Iterate through all possible future slots (Up to Week 4, Day 7)
     for w_idx in range(1, 5):
         for d_idx in range(1, 8):
             this_abs_pos = ((w_idx - 1) * 7) + d_idx
-            
-            # Only sync days that are the current day or in the future
             if this_abs_pos >= current_abs_pos:
                 d_name = f"Day {d_idx}"
                 new_d = day_date + timedelta(days=int(this_abs_pos - current_abs_pos))
-                
-                # Update existing records for this specific week/day
-                mask = (log_df["Week"] == w_idx) & (log_df["Day"] == d_name)
-                if mask.any():
-                    log_df.loc[mask, "Date"] = new_d
-                
-                # Ensure a Day Marker exists so the date "sticks" for future empty days
-                marker_mask = mask & (log_df["Exercise"] == "DAY MARKER")
-                if not marker_mask.any():
+                # Update existing rows
+                log_df.loc[(log_df["Week"] == w_idx) & (log_df["Day"] == d_name), "Date"] = new_d
+                # Upsert Day Marker
+                if log_df[(log_df["Week"] == w_idx) & (log_df["Day"] == d_name) & (log_df["Exercise"] == "DAY MARKER")].empty:
                     marker = pd.DataFrame([{"Week": w_idx, "Day": d_name, "Date": new_d, "Exercise": "DAY MARKER", "Set": 0, "Weight": 0.0, "Duration": 0}])
                     log_df = pd.concat([log_df, marker], ignore_index=True)
-                
-                updated_rows += 1
 
     save_data(log_df)
-    st.toast(f"Success! Sync completed for {updated_rows} day slots.", icon="🚀")
+    st.toast("Entire schedule updated!", icon="✅")
     st.rerun()
 
 st.divider()
 
-# ---------------- EXERCISES & ABS (Standard Logic) ----------------
+# ---------------- EXERCISES & ABS ----------------
 st.subheader(f"Exercises: {day}")
 for ex in workout_plan[day]:
     if ex in abs_exercises: continue
@@ -161,5 +142,4 @@ if any(ex in abs_exercises for ex in workout_plan[day]):
                         df_abs = df_abs[~((df_abs["Week"]==week) & (df_abs["Day"]==day) & (df_abs["Exercise"]==ex) & (df_abs["Set"]==set_num))]
                         new_abs = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Duration":st.session_state[dur_key]}])
                         save_data(pd.concat([df_abs, new_abs], ignore_index=True))
-                        st.toast(f"Saved {ex}!")
                         st.rerun()
