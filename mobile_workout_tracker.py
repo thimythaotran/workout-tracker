@@ -5,6 +5,7 @@ from datetime import date
 
 # --- SETTINGS ---
 DATA_FILE = "workout_log.csv"
+EDIT_PASSWORD = "1234"  # set your password here
 
 # --- WORKOUT PLAN ---
 workout_plan = {
@@ -47,6 +48,12 @@ workout_plan = {
     ]
 }
 
+abs_exercises = [
+    "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+    "Russian Twists", "Mountain Climber Twists", "Flutter Kicks",
+    "Abs Crunches", "Plank", "Leg Raises"
+]
+
 # --- LOAD LOG ---
 if os.path.exists(DATA_FILE):
     log_df = pd.read_csv(DATA_FILE)
@@ -58,6 +65,12 @@ else:
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
 st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
 
+# --- PASSWORD PROTECTION ---
+user_password = st.text_input("Enter password to edit:", type="password")
+can_edit = user_password == EDIT_PASSWORD
+if not can_edit:
+    st.info("🔒 You are in view-only mode. Enter the password to enable editing.")
+
 # --- SELECT WEEK & DAY ---
 week = st.selectbox("Select Week", [1, 2, 3, 4])
 day = st.selectbox("Select Day", list(workout_plan.keys()))
@@ -65,26 +78,28 @@ day = st.selectbox("Select Day", list(workout_plan.keys()))
 # --- AUTO-FILL DATE ---
 existing_dates = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]["Date"]
 default_date = existing_dates.max().date() if not existing_dates.empty else date.today()
-day_date = st.date_input("Date for this Day", value=default_date, key=f"{week}_{day}_date")
+day_date = st.date_input("Date for this Day", value=default_date, key=f"{week}_{day}_date", disabled=not can_edit)
 
-# --- SHOW EXERCISES ---
+# --- NON-ABS EXERCISES ---
 st.subheader(f"Week {week} - {day} ({day_date})")
-
-abs_exercises = [
-    "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
-    "Russian Twists", "Mountain Climber Twists", "Flutter Kicks",
-    "Abs Crunches", "Plank", "Leg Raises"
-]
-
-# Non-abs exercises first
 for ex in workout_plan[day]:
     if ex not in abs_exercises:
         with st.expander(ex):
-            sets = st.number_input(f"Number of sets for {ex}", min_value=1, max_value=10, value=4, key=f"{week}_{day}_{ex}_sets")
+            sets = st.number_input(
+                f"Number of sets for {ex}",
+                min_value=1, max_value=10, value=4,
+                key=f"{week}_{day}_{ex}_sets",
+                disabled=not can_edit
+            )
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
-                weight = st.number_input(f"Set {s} weight (lbs)", min_value=0, step=1, key=weight_key)
-                if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}"):
+                weight = st.number_input(
+                    f"Set {s} weight (lbs)",
+                    min_value=0, step=1,
+                    key=weight_key,
+                    disabled=not can_edit
+                )
+                if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}", disabled=not can_edit):
                     log_df = pd.concat([log_df, pd.DataFrame({
                         "Week": [week],
                         "Day": [day],
@@ -98,22 +113,29 @@ for ex in workout_plan[day]:
                     log_df.to_csv(DATA_FILE, index=False)
                     st.success(f"Saved {ex} Set {s} ({weight} lbs)")
 
-# --- Abs exercises grouped ---
+# --- ABS EXERCISES GROUPED ---
 if any(ex in workout_plan[day] for ex in abs_exercises):
     with st.expander("💪 Abs Exercises"):
-        # 2 sets
         for set_num in range(1, 3):
             st.markdown(f"### Set {set_num}")
             for ex in workout_plan[day]:
                 if ex in abs_exercises:
-                    duration = st.selectbox(
-                        f"{ex} (seconds)",
-                        list(range(1, 61)),
-                        index=29,  # default 30 seconds
-                        key=f"{week}_{day}_{ex}_set{set_num}_duration"
-                    )
-                    completed = st.checkbox(f"Completed {ex}", key=f"{week}_{day}_{ex}_set{set_num}_completed")
-                    if completed:
+                    col1, col2 = st.columns([2, 1])  # combobox larger, checkbox smaller
+                    with col1:
+                        duration = st.selectbox(
+                            f"{ex} duration (seconds)",
+                            list(range(1, 61)),
+                            index=29,
+                            key=f"{week}_{day}_{ex}_set{set_num}_duration",
+                            disabled=not can_edit
+                        )
+                    with col2:
+                        completed = st.checkbox(
+                            "Done",
+                            key=f"{week}_{day}_{ex}_set{set_num}_completed",
+                            disabled=not can_edit
+                        )
+                    if completed and can_edit:
                         log_df = pd.concat([log_df, pd.DataFrame({
                             "Week": [week],
                             "Day": [day],
@@ -126,7 +148,7 @@ if any(ex in workout_plan[day] for ex in abs_exercises):
                         })], ignore_index=True)
                         log_df.to_csv(DATA_FILE, index=False)
                         st.success(f"Saved {ex} Set {set_num} ({duration}s)")
-                                                     
+
 # --- VIEW LOG ---
 st.subheader("📊 Your Progress")
 week_day_log = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
