@@ -91,14 +91,27 @@ for ex in workout_plan[day]:
                 key=f"{week}_{day}_{ex}_sets",
                 disabled=not can_edit
             )
+
+            # Initialize last_weight in session_state if not exists
+            if f"{week}_{day}_{ex}_last_weight" not in st.session_state:
+                st.session_state[f"{week}_{day}_{ex}_last_weight"] = 5.0
+
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
-                weight = st.number_input(
+                # Default weight logic: if weight not selected yet, use last_weight
+                default_weight = st.session_state[f"{week}_{day}_{ex}_last_weight"]
+                weight = st.selectbox(
                     f"Set {s} weight (lbs)",
-                    min_value=0, step=1,
+                    [i * 2.5 for i in range(2, 41)],  # 5 to 100
+                    index=[i*2.5 for i in range(2,41)].index(default_weight),
                     key=weight_key,
                     disabled=not can_edit
                 )
+
+                # If weight is at default, update next default
+                if weight != st.session_state[f"{week}_{day}_{ex}_last_weight"]:
+                    st.session_state[f"{week}_{day}_{ex}_last_weight"] = weight
+
                 if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}", disabled=not can_edit):
                     log_df = pd.concat([log_df, pd.DataFrame({
                         "Week": [week],
@@ -112,7 +125,7 @@ for ex in workout_plan[day]:
                     })], ignore_index=True)
                     log_df.to_csv(DATA_FILE, index=False)
                     st.success(f"Saved {ex} Set {s} ({weight} lbs)")
-
+                    
 # --- ABS EXERCISES GROUPED ---
 if any(ex in workout_plan[day] for ex in abs_exercises):
     with st.expander("💪 Abs Exercises"):
