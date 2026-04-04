@@ -1,5 +1,5 @@
-# VERSION: 2026-04-04 11:15 AM
-# STATUS: Phase 2 - Added Reps (0-20) + Organized Set Rows + Removed App Sync
+# VERSION: 2026-04-04 05:45 PM
+# STATUS: Phase 2 - Manual Save for Gym Sets + Fixed Row Layout + Big Timers
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-GEN_TIMESTAMP = "2026-04-04 11:15 AM" 
+GEN_TIMESTAMP = "2026-04-04 05:45 PM" 
 
 # ---------------- WORKOUT PLAN ----------------
 workout_plan = {
@@ -34,27 +34,13 @@ def load_data():
         df = pd.read_csv(DATA_FILE)
         if not df.empty:
             df["Date"] = pd.to_datetime(df["Date"], errors='coerce').dt.date
-            # Ensure Reps column exists for older files
-            if "Reps" not in df.columns:
-                df["Reps"] = 8
+            if "Reps" not in df.columns: df["Reps"] = 8
         return df
     except Exception:
         return pd.DataFrame(columns=["Week","Day","Date","Exercise","Set","Weight","Reps","Duration"])
 
 def save_data(df):
     df.to_csv(DATA_FILE, index=False)
-
-def on_data_change(week, day, date_val, exercise, set_num, weight_key, reps_key):
-    weight_val = st.session_state[weight_key]
-    reps_val = st.session_state[reps_key]
-    df = load_data()
-    df = df[~((df["Week"] == week) & (df["Day"] == day) & (df["Exercise"] == exercise) & (df["Set"] == set_num))]
-    new_row = pd.DataFrame([{
-        "Week": week, "Day": day, "Date": date_val, "Exercise": exercise, 
-        "Set": set_num, "Weight": float(weight_val), "Reps": int(reps_val), "Duration": 0
-    }])
-    df = pd.concat([df, new_row], ignore_index=True)
-    save_data(df)
 
 # ---------------- APP UI ----------------
 st.set_page_config(page_title="Workout Tracker", layout="centered")
@@ -116,40 +102,51 @@ today_exercises = workout_plan[day]
 gym_ex = [e for e in today_exercises if e not in ABS_MASTER_LIST]
 abs_ex = [e for e in today_exercises if e in ABS_MASTER_LIST]
 
-# ---------------- GYM EXERCISES (WITH REPS) ----------------
+# ---------------- GYM EXERCISES ----------------
 for ex in gym_ex:
     with st.expander(ex):
         show_timer(f"gym_{ex}") 
         st.divider()
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
         
-        # Header for the set columns
-        h1, h2, h3 = st.columns([1, 2, 2])
+        h1, h2, h3, h4 = st.columns([0.8, 2, 2, 1])
         h1.caption("Set")
-        h2.caption("Weight (lb)")
+        h2.caption("Weight")
         h3.caption("Reps")
+        h4.caption("Save")
 
         for s in range(1, sets_count + 1):
-            w_key = f"weight_{week}_{day}_{ex}_{s}"
-            r_key = f"reps_{week}_{day}_{ex}_{s}"
+            w_key = f"w_{week}_{day}_{ex}_{s}"
+            r_key = f"r_{week}_{day}_{ex}_{s}"
             saved = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
             
-            s_weight = float(saved["Weight"].iloc[0]) if not saved.empty else 5.0
-            s_reps = int(saved["Reps"].iloc[0]) if not saved.empty else 8
+            # Initial values from DB or defaults
+            curr_w = float(saved["Weight"].iloc[0]) if not saved.empty else 5.0
+            curr_r = int(saved["Reps"].iloc[0]) if not saved.empty else 8
             
-            c1, c2, c3 = st.columns([1, 2, 2])
+            c1, c2, c3, c4 = st.columns([0.8, 2, 2, 1])
             with c1:
-                st.write(f"**{s}** {'✅' if not saved.empty else ''}")
+                st.write(f"**{s}**")
             with c2:
-                st.selectbox("Weight", [i*2.5 for i in range(1, 61)], index=max(0, min(int(s_weight / 2.5) - 1, 59)), 
-                             key=w_key, disabled=not can_edit, label_visibility="collapsed",
-                             on_change=on_data_change, args=(week, day, day_date, ex, s, w_key, r_key))
+                st.selectbox("W", [i*2.5 for i in range(1, 61)], index=max(0, min(int(curr_w / 2.5) - 1, 59)), 
+                             key=w_key, disabled=not can_edit, label_visibility="collapsed")
             with c3:
-                st.selectbox("Reps", list(range(0, 21)), index=s_reps, 
-                             key=r_key, disabled=not can_edit, label_visibility="collapsed",
-                             on_change=on_data_change, args=(week, day, day_date, ex, s, w_key, r_key))
+                st.selectbox("R", list(range(0, 21)), index=curr_r, 
+                             key=r_key, disabled=not can_edit, label_visibility="collapsed")
+            with c4:
+                is_done = not saved.empty
+                if st.button("✅" if is_done else "💾", key=f"btn_{w_key}", disabled=not can_edit):
+                    df_s = load_data()
+                    df_s = df_s[~((df_s["Week"]==week) & (df_s["Day"]==day) & (df_s["Exercise"]==ex) & (df_s["Set"]==s))]
+                    new_r = pd.DataFrame([{
+                        "Week": week, "Day": day, "Date": day_date, "Exercise": ex, 
+                        "Set": s, "Weight": float(st.session_state[w_key]), 
+                        "Reps": int(st.session_state[r_key]), "Duration": 0
+                    }])
+                    save_data(pd.concat([df_s, new_r], ignore_index=True))
+                    st.rerun()
 
-# ---------------- ABS SECTION (COLLAPSED) ----------------
+# ---------------- ABS SECTION ----------------
 if abs_ex:
     with st.expander("💪 Abs Section", expanded=False):
         show_timer("abs_section") 
