@@ -53,7 +53,7 @@ if "timer_start" not in st.session_state:
 if "timer_running" not in st.session_state:
     st.session_state["timer_running"] = False
 
-# Refresh & Sync UI
+# UI Header
 col_ref, col_stat = st.columns([1, 2])
 with col_ref:
     if st.button("🔄 Refresh"): st.rerun()
@@ -71,12 +71,7 @@ with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 # --- DATE CALCULATION ---
 current_day_num = int(day.split()[-1])
 saved_marker = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == "DAY MARKER")]
-
-if not saved_marker.empty:
-    calculated_date = saved_marker.iloc[0]["Date"]
-else:
-    calculated_date = date.today()
-
+calculated_date = saved_marker.iloc[0]["Date"] if not saved_marker.empty else date.today()
 day_date = st.date_input("Workout Date", value=calculated_date, key=f"date_picker_{week}_{day}", disabled=not can_edit)
 
 # --- LOCK & SYNC ---
@@ -97,21 +92,20 @@ if st.button("💾 Lock & Sync ALL Future", disabled=not can_edit):
 
 st.divider()
 
-# ---------------- REST TIMER ----------------
-t_col1, t_col2 = st.columns([3, 1.2])
-
-with t_col1:
-    if st.session_state["timer_running"] and st.session_state["timer_start"]:
-        elapsed = int(time.time() - st.session_state["timer_start"])
-        st.subheader(f"⏱️ Rest Lapse: `{elapsed}s`")
-    else:
-        st.subheader("⏱️ Rest Lapse: `0s`")
-
-with t_col2:
-    if st.button("Reset Timer", use_container_width=True):
-        st.session_state["timer_start"] = time.time()
-        st.session_state["timer_running"] = True
-        st.rerun()
+# --- TIMER HELPER FUNCTION ---
+def show_timer(key_suffix):
+    t_c1, t_c2 = st.columns([3, 1.2])
+    with t_c1:
+        if st.session_state["timer_running"] and st.session_state["timer_start"]:
+            elapsed = int(time.time() - st.session_state["timer_start"])
+            st.markdown(f"⏱️ **Rest Lapse: `{elapsed}s`**")
+        else:
+            st.markdown("⏱️ **Rest Lapse: `0s`**")
+    with t_c2:
+        if st.button("Reset Timer", key=f"reset_{key_suffix}", use_container_width=True):
+            st.session_state["timer_start"] = time.time()
+            st.session_state["timer_running"] = True
+            st.rerun()
 
 # --- DATA LOADING ---
 today_data = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
@@ -122,6 +116,8 @@ abs_ex = [e for e in today_exercises if e in ABS_MASTER_LIST]
 # ---------------- GYM EXERCISES ----------------
 for ex in gym_ex:
     with st.expander(ex):
+        show_timer(f"gym_{ex}") # Timer inside each expander
+        st.divider()
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
         for s in range(1, sets_count + 1):
             key = f"input_{week}_{day}_{ex}_{s}"
@@ -134,6 +130,8 @@ for ex in gym_ex:
 # ---------------- ABS SECTION ----------------
 if abs_ex:
     with st.expander("💪 Abs Section", expanded=True):
+        show_timer("abs_section") # Timer inside Abs expander
+        st.divider()
         for set_num in [1, 2]:
             st.caption(f"SET {set_num}")
             for ex in abs_ex:
@@ -160,7 +158,7 @@ if not summary_view.empty:
     display_df["Performance"] = display_df.apply(lambda r: f"{r['Weight']} lb" if r["Weight"] > 0 else f"{r['Duration']} sec", axis=1)
     st.dataframe(display_df[["Exercise", "Set", "Performance"]], use_container_width=True, hide_index=True)
 
-# THE CLOCK TICKER - ONLY RUNS IF TIMER IS ON
+# AUTO-REFRESH TICKER
 if st.session_state["timer_running"]:
     time.sleep(1)
     st.rerun()
