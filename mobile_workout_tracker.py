@@ -61,7 +61,7 @@ c_w, c_d = st.columns(2)
 with c_w: week = st.selectbox("Week", [1, 2, 3, 4])
 with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 
-# --- GLOBAL DATE CALCULATION ---
+# --- DATE LOGIC ---
 current_day_num = int(day.split()[-1])
 saved_date_row = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "Date"]
 
@@ -75,18 +75,13 @@ else:
         current_abs_pos = ((week - 1) * 7) + current_day_num
         log_copy = log_copy.sort_values("AbsPos", ascending=False)
         prev_anchors = log_copy[log_copy["AbsPos"] < current_abs_pos]
-        
-        if not prev_anchors.empty:
-            anchor = prev_anchors.iloc[0]
-            calculated_date = anchor["Date"] + timedelta(days=int(current_abs_pos - anchor["AbsPos"]))
-        else:
-            calculated_date = date.today()
+        anchor = prev_anchors.iloc[0] if not prev_anchors.empty else log_copy.sort_values("AbsPos").iloc[0]
+        calculated_date = anchor["Date"] + timedelta(days=int(current_abs_pos - anchor["AbsPos"]))
     else:
         calculated_date = date.today()
 
 day_date = st.date_input("Workout Date", value=calculated_date, key=f"date_picker_{week}_{day}", disabled=not can_edit)
 
-# --- DYNAMIC BUTTON LABEL (SAVE vs CHECKMARK) ---
 already_synced = not saved_date_row.empty and saved_date_row.iloc[0] == day_date
 button_label = "✅ Schedule Synced" if already_synced else "💾 Lock & Sync ALL Future"
 
@@ -98,20 +93,17 @@ if st.button(button_label, disabled=not can_edit or already_synced):
             if this_abs_pos >= current_abs_pos:
                 d_name = f"Day {d_idx}"
                 new_d = day_date + timedelta(days=int(this_abs_pos - current_abs_pos))
-                # Update existing rows
                 log_df.loc[(log_df["Week"] == w_idx) & (log_df["Day"] == d_name), "Date"] = new_d
-                # Upsert Day Marker
                 if log_df[(log_df["Week"] == w_idx) & (log_df["Day"] == d_name) & (log_df["Exercise"] == "DAY MARKER")].empty:
                     marker = pd.DataFrame([{"Week": w_idx, "Day": d_name, "Date": new_d, "Exercise": "DAY MARKER", "Set": 0, "Weight": 0.0, "Duration": 0}])
                     log_df = pd.concat([log_df, marker], ignore_index=True)
-
     save_data(log_df)
     st.toast("Entire schedule updated!", icon="✅")
     st.rerun()
 
 st.divider()
 
-# ---------------- EXERCISES & ABS ----------------
+# ---------------- EXERCISES ----------------
 st.subheader(f"Exercises: {day}")
 for ex in workout_plan[day]:
     if ex in abs_exercises: continue
@@ -126,6 +118,7 @@ for ex in workout_plan[day]:
                          disabled=not can_edit, on_change=on_weight_change, args=(week, day, day_date, ex, s, sets_count, key))
             last_val = st.session_state[key]
 
+# ---------------- ABS SECTION ----------------
 if any(ex in abs_exercises for ex in workout_plan[day]):
     with st.expander("💪 Abs Section"):
         for set_num in [1, 2]:
@@ -142,4 +135,17 @@ if any(ex in abs_exercises for ex in workout_plan[day]):
                         df_abs = df_abs[~((df_abs["Week"]==week) & (df_abs["Day"]==day) & (df_abs["Exercise"]==ex) & (df_abs["Set"]==set_num))]
                         new_abs = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Duration":st.session_state[dur_key]}])
                         save_data(pd.concat([df_abs, new_abs], ignore_index=True))
+                        st.toast(f"Abs: {ex} saved!")
                         st.rerun()
+
+# ---------------- SUMMARY ----------------
+st.divider()
+st.subheader("📊 Summary")
+summary_view = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] != "DAY MARKER")]
+if not summary_view.empty:
+    # Organize summary to show either weight (for gym) or duration (for abs)
+    display_df = summary_view.sort_values(by=["Exercise", "Set"]).copy()
+    display_df["Performance"] = display_df.apply(lambda r: f"{r['Weight']} lb" if r["Weight"] > 0 else f"{r['Duration']} sec", axis=1)
+    st.dataframe(display_df[["Exercise", "Set", "Performance"]], use_container_width=True, hide_index=True)
+else:
+    st.info("No exercises logged for today yet.")
