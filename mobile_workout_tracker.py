@@ -43,15 +43,13 @@ def on_weight_change(week, day, date_val, exercise, set_num, key):
     new_row = pd.DataFrame([{"Week": week, "Day": day, "Date": date_val, "Exercise": exercise, "Set": set_num, "Weight": float(new_weight), "Duration": 0}])
     df = pd.concat([df, new_row], ignore_index=True)
     save_data(df)
-    # RESET TIMER on weight change
-    st.session_state["timer_start"] = time.time()
 
 # ---------------- APP UI ----------------
 st.set_page_config(page_title="Workout Tracker", layout="centered")
 
-# Initialize Timer State
+# Initialize Timer State if not present
 if "timer_start" not in st.session_state:
-    st.session_state["timer_start"] = time.time()
+    st.session_state["timer_start"] = None
 
 col_ref, col_stat = st.columns([1, 2])
 with col_ref:
@@ -108,11 +106,14 @@ if st.button(button_label, disabled=not can_edit or already_synced):
 
 st.divider()
 
-# ---------------- REST TIMER UI ----------------
-t_col1, t_col2 = st.columns([3, 1])
+# ---------------- MANUAL REST TIMER ----------------
+t_col1, t_col2 = st.columns([3, 1.2])
 with t_col1:
-    rest_time = int(time.time() - st.session_state["timer_start"])
-    st.subheader(f"⏱️ Rest Lapse: `{rest_time}s`")
+    if st.session_state["timer_start"] is not None:
+        rest_time = int(time.time() - st.session_state["timer_start"])
+        st.subheader(f"⏱️ Rest Lapse: `{rest_time}s`")
+    else:
+        st.subheader("⏱️ Rest Lapse: `0s`")
 with t_col2:
     if st.button("Reset Timer", use_container_width=True):
         st.session_state["timer_start"] = time.time()
@@ -156,7 +157,6 @@ if abs_ex:
                         df_save = df_save[~((df_save["Week"]==week) & (df_save["Day"]==day) & (df_save["Exercise"]==ex) & (df_save["Set"]==set_num))]
                         new_row = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Duration":st.session_state[dur_key]}])
                         save_data(pd.concat([df_save, new_row], ignore_index=True))
-                        st.session_state["timer_start"] = time.time() # RESET TIMER
                         st.rerun()
             st.divider()
 
