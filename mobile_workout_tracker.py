@@ -1,5 +1,5 @@
-# VERSION: 2026-04-04 07:20 PM
-# STATUS: Phase 2 - Independent Row Validation + Copy Set 1 + Mobile Optimized
+# VERSION: 2026-04-04 07:30 PM
+# STATUS: Phase 2 - Absolute Row Independence + Copy Set 1 + Mobile Optimized
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- DATA ENGINE ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-GEN_TIMESTAMP = "2026-04-04 07:20 PM" 
+GEN_TIMESTAMP = "2026-04-04 07:30 PM" 
 
 def load_data():
     if not os.path.exists(DATA_FILE):
@@ -126,18 +126,14 @@ for ex in gym_ex:
         for s in range(1, sets_count + 1):
             w_key, r_key = f"w_{week}_{day}_{ex}_{s}", f"r_{week}_{day}_{ex}_{s}"
             
-            # Fetch data for THIS specific set
+            # Fetch CURRENT DB STATE for this exact row
             row_match = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
             
-            # If no data exists in DB for this set, we use defaults or existing session state
-            db_w = float(row_match["Weight"].iloc[0]) if not row_match.empty else None
-            db_r = int(row_match["Reps"].iloc[0]) if not row_match.empty else None
-            
-            # Initialize dropdown values if they aren't already set by 'Copy' or DB
+            # Use Session State to keep UI responsive
             if w_key not in st.session_state:
-                st.session_state[w_key] = db_w if db_w is not None else 5.0
+                st.session_state[w_key] = float(row_match["Weight"].iloc[0]) if not row_match.empty else 5.0
             if r_key not in st.session_state:
-                st.session_state[r_key] = db_r if db_r is not None else 8
+                st.session_state[r_key] = int(row_match["Reps"].iloc[0]) if not row_match.empty else 8
             
             c1, c2, c3, c4 = st.columns([0.7, 1.5, 1.5, 0.8])
             with c1: st.write(f"**{s}**")
@@ -148,18 +144,21 @@ for ex in gym_ex:
                 st.selectbox("R", list(range(0, 21)), 
                              key=r_key, disabled=not can_edit, label_visibility="collapsed")
             with c4:
-                # INDEPENDENT SYNC CHECK:
-                # 1. Row MUST exist in database
-                # 2. UI values MUST match exactly what's in that row
-                is_synced = (not row_match.empty and 
-                             float(st.session_state[w_key]) == db_w and 
-                             int(st.session_state[r_key]) == db_r)
+                # TRIPLE-CHECK INDEPENDENCE:
+                # 1. Does a match exist in DB?
+                # 2. Does weight match that SPECIFIC row?
+                # 3. Does reps match that SPECIFIC row?
+                is_synced = False
+                if not row_match.empty:
+                    db_w = float(row_match["Weight"].iloc[0])
+                    db_r = int(row_match["Reps"].iloc[0])
+                    if st.session_state[w_key] == db_w and st.session_state[r_key] == db_r:
+                        is_synced = True
                 
                 if st.button("✅" if is_synced else "💾", key=f"btn_{w_key}", disabled=not can_edit):
                     df_s = load_data()
-                    # Delete old entry for THIS set only
+                    # Only remove the specific set we are saving
                     df_s = df_s[~((df_s["Week"]==week) & (df_s["Day"]==day) & (df_s["Exercise"]==ex) & (df_s["Set"]==s))]
-                    # Add new entry
                     new_r = pd.DataFrame([{"Week": week, "Day": day, "Date": day_date, "Exercise": ex, "Set": s, "Weight": float(st.session_state[w_key]), "Reps": int(st.session_state[r_key]), "Duration": 0}])
                     save_data(pd.concat([df_s, new_r], ignore_index=True))
                     st.rerun()
@@ -174,15 +173,14 @@ if abs_ex:
             for ex in abs_ex:
                 dur_key = f"abs_{week}_{day}_{ex}_{set_num}"
                 row_abs = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == set_num)]
-                db_dur = int(row_abs["Duration"].iloc[0]) if not row_abs.empty else None
                 
                 if dur_key not in st.session_state:
-                    st.session_state[dur_key] = db_dur if db_dur is not None else 30
+                    st.session_state[dur_key] = int(row_abs["Duration"].iloc[0]) if not row_abs.empty else 30
                 
                 c1, c2 = st.columns([4, 1]) 
                 with c1: st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), key=dur_key, disabled=not can_edit, label_visibility="collapsed")
                 with c2:
-                    abs_synced = (not row_abs.empty and int(st.session_state[dur_key]) == db_dur)
+                    abs_synced = (not row_abs.empty and int(st.session_state[dur_key]) == int(row_abs["Duration"].iloc[0]))
                     if st.button("✅" if abs_synced else "💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
                         df_save = load_data()
                         df_save = df_save[~((df_save["Week"]==week) & (df_save["Day"]==day) & (df_save["Exercise"]==ex) & (df_save["Set"]==set_num))]
