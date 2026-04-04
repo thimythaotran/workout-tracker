@@ -5,7 +5,7 @@ from datetime import date
 
 # --- SETTINGS ---
 DATA_FILE = "workout_log.csv"
-EDIT_PASSWORD = "1234"
+EDIT_PASSWORD = "1"
 
 # --- WORKOUT PLAN ---
 workout_plan = {
