@@ -35,8 +35,8 @@ workout_plan = {
 }
 
 abs_exercises = ["Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
-                 "Russian Twists", "Mountain Climber Twists", "Flutter Kicks",
-                 "Abs Crunches", "Plank", "Leg Raises"]
+                 "Russian Twists", "Mountain Climber Twists",
+                 "Flutter Kicks", "Abs Crunches", "Plank", "Leg Raises"]
 
 # --- LOAD LOG ---
 if os.path.exists(DATA_FILE):
@@ -45,17 +45,6 @@ if os.path.exists(DATA_FILE):
         log_df["Date"] = pd.to_datetime(log_df["Date"], errors="coerce")
 else:
     log_df = pd.DataFrame(columns=["Week", "Day", "Date", "Exercise", "Set", "Weight", "Duration", "Completed"])
-
-# --- Preload saved values into session_state ---
-for idx, row in log_df.iterrows():
-    key_w = f"{row['Week']}_{row['Day']}_{row['Exercise']}_{row['Set']}_weight"
-    st.session_state[key_w] = row['Weight']
-
-    if row['Exercise'] in abs_exercises:
-        key_d = f"{row['Week']}_{row['Day']}_{row['Exercise']}_{row['Set']}_duration"
-        key_c = f"{row['Week']}_{row['Day']}_{row['Exercise']}_{row['Set']}_completed"
-        st.session_state[key_d] = row['Duration']
-        st.session_state[key_c] = row['Completed']
 
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
 st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
@@ -87,83 +76,39 @@ for ex in workout_plan[day]:
 
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
-                default_weight = st.session_state.get(weight_key, 5.0)  # just 5 if new
+                
+                # Use previous saved value only if exists, else default 5
+                default_weight = log_df.loc[
+                    (log_df["Week"]==week) & 
+                    (log_df["Day"]==day) & 
+                    (log_df["Exercise"]==ex) & 
+                    (log_df["Set"]==s), "Weight"
+                ]
+                if not default_weight.empty:
+                    default_weight = default_weight.values[0]
+                else:
+                    default_weight = 5.0
 
                 weight = st.selectbox(
                     f"Set {s} weight (lbs)",
-                    [i * 2.5 for i in range(2, 41)],
-                    index=[i*2.5 for i in range(2, 41)].index(default_weight),
+                    [i*2.5 for i in range(2,41)],
+                    index=[i*2.5 for i in range(2,41)].index(default_weight),
                     key=weight_key,
                     disabled=not can_edit
                 )
 
                 if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}", disabled=not can_edit):
+                    # Remove existing row for this set before saving to avoid duplicates
+                    log_df = log_df[~((log_df["Week"]==week) & (log_df["Day"]==day) & (log_df["Exercise"]==ex) & (log_df["Set"]==s))]
                     log_df = pd.concat([log_df, pd.DataFrame({
-                        "Week": [week],
-                        "Day": [day],
-                        "Date": [day_date],
-                        "Exercise": [ex],
-                        "Set": [s],
-                        "Weight": [weight],
-                        "Duration": [0],
-                        "Completed": [True]
+                        "Week":[week],
+                        "Day":[day],
+                        "Date":[day_date],
+                        "Exercise":[ex],
+                        "Set":[s],
+                        "Weight":[weight],
+                        "Duration":[0],
+                        "Completed":[True]
                     })], ignore_index=True)
                     log_df.to_csv(DATA_FILE, index=False)
                     st.success(f"Saved {ex} Set {s} ({weight} lbs)")
-
-# --- ABS EXERCISES ---
-if any(ex in workout_plan[day] for ex in abs_exercises):
-    with st.expander("💪 Abs Exercises"):
-        for set_num in range(1, 3):
-            st.markdown(f"### Set {set_num}")
-            for ex in workout_plan[day]:
-                if ex in abs_exercises:
-                    col1, col2 = st.columns([2, 1])
-                    with col1:
-                        duration_key = f"{week}_{day}_{ex}_set{set_num}_duration"
-                        duration = st.selectbox(
-                            f"{ex} (seconds)",
-                            list(range(1, 61)),
-                            index=st.session_state.get(duration_key, 30)-1,
-                            key=duration_key,
-                            disabled=not can_edit
-                        )
-                    with col2:
-                        completed_key = f"{week}_{day}_{ex}_set{set_num}_completed"
-                        completed = st.checkbox(
-                            "Done",
-                            value=st.session_state.get(completed_key, False),
-                            key=completed_key,
-                            disabled=not can_edit
-                        )
-
-                    if completed and can_edit:
-                        log_df = pd.concat([log_df, pd.DataFrame({
-                            "Week": [week],
-                            "Day": [day],
-                            "Date": [day_date],
-                            "Exercise": [ex],
-                            "Set": [set_num],
-                            "Weight": [0],
-                            "Duration": [duration],
-                            "Completed": [True]
-                        })], ignore_index=True)
-                        log_df.to_csv(DATA_FILE, index=False)
-                        st.success(f"Saved {ex} Set {set_num} ({duration}s)")
-
-# --- VIEW LOG ---
-st.subheader("📊 Your Progress")
-week_day_log = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
-st.dataframe(week_day_log)
-
-# --- WEEKLY COMPARISON ---
-st.subheader("📈 Previous Weeks Comparison")
-compare_ex = st.selectbox("Select Exercise to Compare", workout_plan[day])
-compare_df = log_df[(log_df["Day"] == day) & (log_df["Exercise"] == compare_ex)]
-
-if not compare_df.empty:
-    comparison = compare_df.groupby("Week")["Weight"].mean().reset_index()
-    comparison = comparison.sort_values("Week")
-    st.line_chart(comparison.rename(columns={"Week": "Week", "Weight": "Avg Weight"}).set_index("Week"))
-else:
-    st.info("No data yet for this exercise across weeks.")
