@@ -6,15 +6,45 @@ from datetime import date
 # --- SETTINGS ---
 DATA_FILE = "workout_log.csv"
 
-# --- WORKOUT PLAN ---
+# --- WORKOUT PLAN (Updated with your full detailed exercises) ---
 workout_plan = {
-    "Day 1": ["Flat Bench Press", "Incline Bench Press", "Cable Flies", "Tricep Extensions"],
-    "Day 2": ["Squat", "Leg Extensions", "Leg Curls", "Calf Raises"],
-    "Day 3": ["Pull-ups", "Barbell Rows", "Lat Pulldown", "Bicep Curls"],
-    "Day 4": ["Shoulder Press", "Lateral Raises", "Front Raises", "Shrugs"],
-    "Day 5": ["Deadlift", "Romanian Deadlift", "Hamstring Curls", "Calf Raises"],
-    "Day 6": ["Chest Dips", "Push-ups", "Tricep Dips", "Cable Flies"],
-    "Day 7": ["Abs Crunches", "Plank", "Leg Raises", "Russian Twists"]
+    "Day 1": [
+        "Flat Bench Press", "Incline Bench Press", "Cable Flies",
+        "Cable Tricep Extensions", "Skull Crushers", "Dips", "Push Ups",
+        "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+        "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"
+    ],
+    "Day 2": [
+        "Straight Bar Deadlift", "Seated Rows", "Lat Pull Downs",
+        "One Arm Dumbbell Rows", "DB Bicep Curl", "Hammer Curls",
+        "Concentration Curls", "Leg Drops", "Reverse Leg Crunches",
+        "Sit-Up Twists", "Russian Twists", "Mountain Climber Twists",
+        "Flutter Kicks"
+    ],
+    "Day 3": [
+        "Squat", "Leg Extensions", "Leg Curls", "Calf Raises",
+        "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+        "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"
+    ],
+    "Day 4": [
+        "Shoulder Press", "Lateral Raises", "Front Raises", "Shrugs",
+        "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+        "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"
+    ],
+    "Day 5": [
+        "Deadlift", "Romanian Deadlift", "Hamstring Curls", "Calf Raises",
+        "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+        "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"
+    ],
+    "Day 6": [
+        "Chest Dips", "Push-ups", "Tricep Dips", "Cable Flies",
+        "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+        "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"
+    ],
+    "Day 7": [
+        "Abs Crunches", "Plank", "Leg Raises", "Russian Twists",
+        "Mountain Climber Twists", "Flutter Kicks"
+    ]
 }
 
 # --- LOAD LOG ---
@@ -24,20 +54,15 @@ else:
     log_df = pd.DataFrame(columns=["Week", "Day", "Date", "Exercise", "Set", "Weight"])
 
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
-st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")  # smaller title
+st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
 
 # --- SELECT WEEK & DAY ---
 week = st.selectbox("Select Week", [1, 2, 3, 4])
 day = st.selectbox("Select Day", list(workout_plan.keys()))
 
 # --- AUTO-FILL DATE ---
-# Check if we already have a date for this week/day
 existing_dates = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]["Date"]
-if not existing_dates.empty:
-    default_date = existing_dates.max().date()
-else:
-    default_date = date.today()
-
+default_date = existing_dates.max().date() if not existing_dates.empty else date.today()
 day_date = st.date_input("Date for this Day", value=default_date, key=f"{week}_{day}_date")
 
 # --- SHOW EXERCISES ---
