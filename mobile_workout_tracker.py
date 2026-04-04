@@ -58,7 +58,7 @@ abs_exercises = [
 if os.path.exists(DATA_FILE):
     log_df = pd.read_csv(DATA_FILE, parse_dates=["Date"])
 else:
-    log_df = pd.DataFrame(columns=["Week", "Day", "Date", "Exercise", "Set", "Weight", "Done"])
+    log_df = pd.DataFrame(columns=["Week", "Day", "Date", "Exercise", "Set", "Weight", "DurationSec", "Done"])
 
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
 st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
@@ -94,29 +94,33 @@ for ex in normal_exercises:
                     "Exercise": [ex],
                     "Set": [s],
                     "Weight": [weight],
+                    "DurationSec": [0],
                     "Done": [True]
                 })], ignore_index=True)
                 log_df.to_csv(DATA_FILE, index=False)
                 st.success(f"Saved {ex} Set {s} ({weight} lbs)")
 
-# --- Abs exercises (checkboxes) ---
+# --- Abs exercises (checkboxes + duration + 2 sets) ---
 if todays_abs:
     with st.expander("Abs"):
         for ex in todays_abs:
             done = st.checkbox(ex, key=f"{week}_{day}_abs_{ex}")
+            duration = st.selectbox(f"Duration for {ex} (seconds)", options=list(range(1,61)), index=29, key=f"{week}_{day}_abs_{ex}_duration")
             if done:
-                # Save if not already saved
-                if log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex)].empty:
-                    log_df = pd.concat([log_df, pd.DataFrame({
-                        "Week": [week],
-                        "Day": [day],
-                        "Date": [day_date],
-                        "Exercise": [ex],
-                        "Set": [0],
-                        "Weight": [0],
-                        "Done": [True]
-                    })], ignore_index=True)
-                    log_df.to_csv(DATA_FILE, index=False)
+                # Save 2 sets if not already saved
+                for s in range(1, 3):
+                    if log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] == s)].empty:
+                        log_df = pd.concat([log_df, pd.DataFrame({
+                            "Week": [week],
+                            "Day": [day],
+                            "Date": [day_date],
+                            "Exercise": [ex],
+                            "Set": [s],
+                            "Weight": [0],
+                            "DurationSec": [duration],
+                            "Done": [True]
+                        })], ignore_index=True)
+                log_df.to_csv(DATA_FILE, index=False)
 
 # --- VIEW LOG ---
 st.subheader("📊 Your Progress")
