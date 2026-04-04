@@ -77,29 +77,25 @@ for ex in workout_plan[day]:
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
                 
-                # Use previous saved value only if exists, else default 5
-                default_weight = log_df.loc[
-                    (log_df["Week"]==week) & 
-                    (log_df["Day"]==day) & 
-                    (log_df["Exercise"]==ex) & 
-                    (log_df["Set"]==s), "Weight"
-                ]
-                if not default_weight.empty:
-                    default_weight = default_weight.values[0]
-                else:
-                    default_weight = 5.0
+                # Initialize default weight only if key does not exist yet
+                if weight_key not in st.session_state:
+                    prev_weight = log_df.loc[
+                        (log_df["Week"]==week) & (log_df["Day"]==day) &
+                        (log_df["Exercise"]==ex) & (log_df["Set"]==s), "Weight"
+                    ]
+                    st.session_state[weight_key] = prev_weight.values[0] if not prev_weight.empty else 5.0
 
                 weight = st.selectbox(
                     f"Set {s} weight (lbs)",
                     [i*2.5 for i in range(2,41)],
-                    index=[i*2.5 for i in range(2,41)].index(default_weight),
                     key=weight_key,
                     disabled=not can_edit
                 )
 
                 if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}", disabled=not can_edit):
-                    # Remove existing row for this set before saving to avoid duplicates
-                    log_df = log_df[~((log_df["Week"]==week) & (log_df["Day"]==day) & (log_df["Exercise"]==ex) & (log_df["Set"]==s))]
+                    # Remove previous entry for same set
+                    log_df = log_df[~((log_df["Week"]==week) & (log_df["Day"]==day) &
+                                      (log_df["Exercise"]==ex) & (log_df["Set"]==s))]
                     log_df = pd.concat([log_df, pd.DataFrame({
                         "Week":[week],
                         "Day":[day],
