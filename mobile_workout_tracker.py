@@ -106,17 +106,21 @@ if any(ex in workout_plan[day] for ex in abs_exercises):
             st.markdown(f"### Set {set_num}")
             for ex in workout_plan[day]:
                 if ex in abs_exercises:
-                    col1, col2 = st.columns([1, 1])
-                    with col1:
+                    # Create 3 columns: checkbox, exercise name, duration
+                    col_chk, col_name, col_dur = st.columns([0.1, 1, 1])
+                    with col_chk:
                         completed = st.checkbox("", key=f"{week}_{day}_{ex}_set{set_num}_completed")
-                    with col2:
+                    with col_name:
+                        st.write(ex)
+                    with col_dur:
                         duration = st.selectbox(
-                            f"{ex} duration (sec)",
+                            "Seconds",
                             list(range(1, 61)),
                             index=29,
                             key=f"{week}_{day}_{ex}_set{set_num}_duration"
                         )
-                    st.markdown(f"**{ex}**")  # show name next to checkbox
+
+                    # Log if completed
                     if completed:
                         log_df = pd.concat([log_df, pd.DataFrame({
                             "Week": [week],
@@ -130,7 +134,7 @@ if any(ex in workout_plan[day] for ex in abs_exercises):
                         })], ignore_index=True)
                         log_df.to_csv(DATA_FILE, index=False)
                         st.success(f"Saved {ex} Set {set_num} ({duration}s)")
-                                             
+                                          
 # --- VIEW LOG ---
 st.subheader("📊 Your Progress")
 week_day_log = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
