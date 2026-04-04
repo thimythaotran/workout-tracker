@@ -1,5 +1,5 @@
-# VERSION: 2026-04-04 07:58 PM
-# STATUS: Phase 2 - Absolute Purge (Fixes Sticky Summary/UI)
+# VERSION: 2.01
+# STATUS: Phase 2 - Instant Purge Logic + Versioning Update
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-GEN_TIMESTAMP = "2026-04-04 07:58 PM" 
+VERSION = "2.01" 
 
 workout_plan = {
     "Day 1": ["Flat Bench Press","Incline Bench Press","Cable Flies","Cable Tricep Extensions","Skull Crushers","Dips","Push Ups","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
@@ -60,7 +60,7 @@ col_ref, col_ver = st.columns([1, 2])
 with col_ref:
     if st.button("🔄 Refresh"): st.rerun()
 with col_ver:
-    st.caption(f"Ver: {GEN_TIMESTAMP}")
+    st.caption(f"Ver: {VERSION}")
 
 password = st.text_input("Enter password", type="password")
 can_edit = password == EDIT_PASSWORD
@@ -73,35 +73,32 @@ with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 saved_marker = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == "DAY MARKER")]
 day_date = st.date_input("Workout Date", value=saved_marker.iloc[0]["Date"] if not saved_marker.empty else date.today(), disabled=not can_edit)
 
-st.divider()
-
-# ---------------- GLOBAL PURGE CHECK ----------------
-# We need to check every exercise in the current workout plan for over-sets
+# ---------------- PRE-RENDER PURGE ----------------
 current_workout_exercises = workout_plan[day]
 gym_ex = [e for e in current_workout_exercises if e not in ABS_MASTER_LIST]
 abs_ex = [e for e in current_workout_exercises if e in ABS_MASTER_LIST]
 
-dirty = False
+purge_needed = False
 for ex in gym_ex:
-    # Use the session state key for the number input if it exists
     s_key = f"sets_{week}_{day}_{ex}"
     if s_key in st.session_state:
-        current_limit = st.session_state[s_key]
-        # Check if database has sets higher than the current limit
-        over_sets = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] > current_limit)]
+        current_ui_limit = st.session_state[s_key]
+        # Check if DB has sets higher than what the UI says
+        over_sets = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] > current_ui_limit)]
         if not over_sets.empty:
-            log_df = log_df[~((log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] > current_limit))]
-            dirty = True
-            # Clear memory
-            for s_clear in range(current_limit + 1, 11):
+            log_df = log_df[~((log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] > current_ui_limit))]
+            purge_needed = True
+            # Clear internal memory for those ghost sets
+            for s_clear in range(current_ui_limit + 1, 11):
                 st.session_state.pop(f"weight_{week}_{day}_{ex}_{s_clear}", None)
                 st.session_state.pop(f"reps_{week}_{day}_{ex}_{s_clear}", None)
 
-if dirty:
+if purge_needed:
     save_data(log_df)
-    st.rerun()
+    st.rerun() # Force a clean state before showing summary
 
 # ---------------- RENDER ----------------
+st.divider()
 today_data = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
 
 def show_timer(key_suffix):
