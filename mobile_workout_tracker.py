@@ -47,11 +47,10 @@ else:
     log_df = pd.DataFrame(columns=["Week", "Day", "Date", "Exercise", "Set", "Weight", "Duration", "Completed"])
 
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
+st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
 
 # --- VERSION TIMESTAMP ---
 st.markdown("🕒 **Version Timestamp:** 2026-04-03 18:00:00")
-
-st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
 
 # --- PASSWORD ---
 user_password = st.text_input("Enter password to edit:", type="password")
@@ -63,10 +62,19 @@ if not can_edit:
 week = st.selectbox("Select Week", [1, 2, 3, 4])
 day = st.selectbox("Select Day", list(workout_plan.keys()))
 
-# --- DATE (fixed: remember per week/day) ---
+# --- DATE (fixed) ---
 existing_dates = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]["Date"]
-default_date = existing_dates.max().date() if not existing_dates.empty else date.today()
 
+if not existing_dates.empty:
+    max_date = existing_dates.max()
+    if pd.isna(max_date):
+        default_date = date.today()
+    else:
+        default_date = pd.to_datetime(max_date).date()
+else:
+    default_date = date.today()
+
+# store per week/day in session_state to avoid losing selection
 date_key = f"{week}_{day}_date_value"
 if date_key not in st.session_state:
     st.session_state[date_key] = default_date
@@ -77,9 +85,7 @@ day_date = st.date_input(
     key=f"{week}_{day}_date",
     disabled=not can_edit
 )
-
-# --- Save selected date in session_state ---
-st.session_state[date_key] = day_date
+st.session_state[date_key] = day_date  # update session_state
 
 # --- NON-ABS EXERCISES ---
 st.subheader(f"Week {week} - {day} ({day_date})")
@@ -109,6 +115,7 @@ for ex in workout_plan[day]:
                 )
 
                 if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}", disabled=not can_edit):
+                    # Remove previous entry for same set
                     log_df = log_df[~((log_df["Week"]==week) & (log_df["Day"]==day) &
                                       (log_df["Exercise"]==ex) & (log_df["Set"]==s))]
                     log_df = pd.concat([log_df, pd.DataFrame({
