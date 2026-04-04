@@ -1,5 +1,5 @@
-# VERSION: 2026-04-04 06:55 PM
-# STATUS: Phase 2 - Restored Abs Save Buttons + Added Abs Reps
+# VERSION: 2026-04-04 07:10 PM
+# STATUS: Phase 2 - Added Set Purge Logic + Memory Cleanup
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-GEN_TIMESTAMP = "2026-04-04 06:55 PM" 
+GEN_TIMESTAMP = "2026-04-04 07:10 PM" 
 
 # ---------------- WORKOUT PLAN ----------------
 workout_plan = {
@@ -95,13 +95,29 @@ today_data = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
 gym_ex = [e for e in workout_plan[day] if e not in ABS_MASTER_LIST]
 abs_ex = [e for e in workout_plan[day] if e in ABS_MASTER_LIST]
 
-# ---------------- GYM EXERCISES (AUTO-SAVE) ----------------
+# ---------------- GYM EXERCISES ----------------
 for ex in gym_ex:
     with st.expander(ex):
         show_timer(f"gym_{ex}") 
         st.divider()
+        
+        # 1. SET INPUT
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
         
+        # 2. PURGE LOGIC: If user reduced sets, delete the extra data from CSV immediately
+        db_sets = today_data[today_data["Exercise"] == ex]["Set"].tolist()
+        if db_sets and max(db_sets) > sets_count:
+            log_df = load_data() # reload fresh
+            # Keep only sets <= current sets_count
+            mask = ~((log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] > sets_count))
+            log_df = log_df[mask]
+            save_data(log_df)
+            # Clear from session state too so they reset to default if re-added
+            for s_to_clear in range(sets_count + 1, 11):
+                st.session_state.pop(f"weight_{week}_{day}_{ex}_{s_to_clear}", None)
+                st.session_state.pop(f"reps_{week}_{day}_{ex}_{s_to_clear}", None)
+            st.rerun()
+
         h1, h2, h3 = st.columns([1, 2, 2])
         h1.caption("Set")
         h2.caption("Weight (lb)")
@@ -125,7 +141,7 @@ for ex in gym_ex:
                              key=r_key, disabled=not can_edit, label_visibility="collapsed",
                              on_change=on_data_change, args=(week, day, day_date, ex, s, w_key, r_key))
 
-# ---------------- ABS SECTION (MANUAL SAVE) ----------------
+# ---------------- ABS SECTION ----------------
 if abs_ex:
     with st.expander("💪 Abs Section", expanded=False):
         show_timer("abs_section") 
@@ -147,7 +163,7 @@ if abs_ex:
                 with c2:
                     st.selectbox(f"Reps", list(range(0, 51)), index=s_reps, key=reps_key, disabled=not can_edit)
                 with c3:
-                    st.write("") # Spacer
+                    st.write("") 
                     if st.button("💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
                         df_s = load_data()
                         df_s = df_s[~((df_s["Week"]==week) & (df_s["Day"]==day) & (df_s["Exercise"]==ex) & (df_s["Set"]==set_num))]
