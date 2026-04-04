@@ -1,5 +1,5 @@
-# VERSION: 2026-04-04 08:10 PM
-# STATUS: Phase 2 - Absolute Row Isolation Logic (Fix for Independent Save)
+# VERSION: 2026-04-04 08:25 PM
+# STATUS: Phase 2 - FINAL FIX for Independent Save Buttons
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- DATA ENGINE ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-GEN_TIMESTAMP = "2026-04-04 08:10 PM" 
+GEN_TIMESTAMP = "2026-04-04 08:25 PM" 
 
 def load_data():
     if not os.path.exists(DATA_FILE):
@@ -94,11 +94,14 @@ def show_timer(key_suffix):
             st.session_state["timer_running"] = True
             st.rerun()
 
-today_data = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
+# ---------------- GYM EXERCISES ----------------
+# Reload full data to ensure sync-check is fresh on every loop
+current_log = load_data()
+today_data = current_log[(current_log["Week"] == week) & (current_log["Day"] == day)]
+
 gym_ex = [e for e in workout_plan[day] if e not in ABS_MASTER_LIST]
 abs_ex = [e for e in workout_plan[day] if e in ABS_MASTER_LIST]
 
-# ---------------- GYM EXERCISES ----------------
 for ex in gym_ex:
     with st.expander(ex):
         show_timer(f"gym_{ex}") 
@@ -126,43 +129,44 @@ for ex in gym_ex:
         for s in range(1, sets_count + 1):
             w_key, r_key = f"w_{week}_{day}_{ex}_{s}", f"r_{week}_{day}_{ex}_{s}"
             
-            # ISOLATED DB FETCH: Filter by exercise AND set number
-            specific_row = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
+            # --- THE FIX: Precise Filtering for THIS row only ---
+            this_row = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
             
             if w_key not in st.session_state:
-                st.session_state[w_key] = float(specific_row["Weight"].iloc[0]) if not specific_row.empty else 5.0
+                st.session_state[w_key] = float(this_row["Weight"].iloc[0]) if not this_row.empty else 5.0
             if r_key not in st.session_state:
-                st.session_state[r_key] = int(specific_row["Reps"].iloc[0]) if not specific_row.empty else 8
+                st.session_state[r_key] = int(this_row["Reps"].iloc[0]) if not this_row.empty else 8
             
             c1, c2, c3, c4 = st.columns([0.7, 1.5, 1.5, 0.8])
             with c1: st.write(f"**{s}**")
             with c2: st.selectbox("W", [i*2.5 for i in range(1, 61)], key=w_key, disabled=not can_edit, label_visibility="collapsed")
             with c3: st.selectbox("R", list(range(0, 21)), key=r_key, disabled=not can_edit, label_visibility="collapsed")
             with c4:
-                # RIGID VALIDATION: Row must exist + Weight must match + Reps must match
-                is_row_saved = False
-                if not specific_row.empty:
-                    db_w = float(specific_row["Weight"].iloc[0])
-                    db_r = int(specific_row["Reps"].iloc[0])
-                    if st.session_state[w_key] == db_w and st.session_state[r_key] == db_r:
-                        is_row_saved = True
+                # --- INDEPENDENT VALIDATION ---
+                # Check if THIS specific set exists in the DB and matches the screen
+                saved_in_db = False
+                if not this_row.empty:
+                    match_w = float(this_row["Weight"].iloc[0])
+                    match_r = int(this_row["Reps"].iloc[0])
+                    if st.session_state[w_key] == match_w and st.session_state[r_key] == match_r:
+                        saved_in_db = True
                 
-                label = "✅" if is_row_saved else "💾"
+                btn_icon = "✅" if saved_in_db else "💾"
                 
-                if st.button(label, key=f"btn_{w_key}", disabled=not can_edit):
-                    df_upd = load_data()
-                    # Delete only this specific set's record
-                    df_upd = df_upd[~((df_upd["Week"] == week) & 
-                                      (df_upd["Day"] == day) & 
-                                      (df_upd["Exercise"] == ex) & 
-                                      (df_upd["Set"] == s))]
+                if st.button(btn_icon, key=f"btn_{w_key}", disabled=not can_edit):
+                    fresh_log = load_data()
+                    # Delete only this specific set/exercise combo
+                    fresh_log = fresh_log[~((fresh_log["Week"] == week) & 
+                                            (fresh_log["Day"] == day) & 
+                                            (fresh_log["Exercise"] == ex) & 
+                                            (fresh_log["Set"] == s))]
                     
-                    new_line = pd.DataFrame([{
+                    new_data = pd.DataFrame([{
                         "Week": week, "Day": day, "Date": day_date, "Exercise": ex, 
                         "Set": s, "Weight": float(st.session_state[w_key]), 
                         "Reps": int(st.session_state[r_key]), "Duration": 0
                     }])
-                    save_data(pd.concat([df_upd, new_line], ignore_index=True))
+                    save_data(pd.concat([fresh_log, new_data], ignore_index=True))
                     st.rerun()
 
 # ---------------- ABS SECTION ----------------
@@ -182,12 +186,12 @@ if abs_ex:
                 c1, c2 = st.columns([4, 1]) 
                 with c1: st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), key=dur_key, disabled=not can_edit, label_visibility="collapsed")
                 with c2:
-                    is_abs_saved = (not abs_row.empty and int(st.session_state[dur_key]) == int(abs_row["Duration"].iloc[0]))
-                    if st.button("✅" if is_abs_saved else "💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
+                    abs_is_saved = (not abs_row.empty and int(st.session_state[dur_key]) == int(abs_row["Duration"].iloc[0]))
+                    if st.button("✅" if abs_is_saved else "💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
                         df_abs = load_data()
                         df_abs = df_abs[~((df_abs["Week"]==week) & (df_abs["Day"]==day) & (df_abs["Exercise"]==ex) & (df_abs["Set"]==set_num))]
-                        new_abs = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Reps":0, "Duration":st.session_state[dur_key]}])
-                        save_data(pd.concat([df_abs, new_abs], ignore_index=True))
+                        new_abs_row = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Reps":0, "Duration":st.session_state[dur_key]}])
+                        save_data(pd.concat([df_abs, new_abs_row], ignore_index=True))
                         st.rerun()
             st.divider()
 
