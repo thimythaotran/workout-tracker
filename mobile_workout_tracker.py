@@ -1,5 +1,5 @@
-# VERSION: 2026-04-04 05:45 PM
-# STATUS: Phase 2 - Manual Save for Gym Sets + Fixed Row Layout + Big Timers
+# VERSION: 2026-04-04 05:55 PM
+# STATUS: Phase 2 - Ultra-Compact Mobile Rows + Manual Save + Big Timers
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-GEN_TIMESTAMP = "2026-04-04 05:45 PM" 
+GEN_TIMESTAMP = "2026-04-04 05:55 PM" 
 
 # ---------------- WORKOUT PLAN ----------------
 workout_plan = {
@@ -109,7 +109,8 @@ for ex in gym_ex:
         st.divider()
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
         
-        h1, h2, h3, h4 = st.columns([0.8, 2, 2, 1])
+        # Super tight ratios for mobile
+        h1, h2, h3, h4 = st.columns([0.7, 1.5, 1.5, 0.8])
         h1.caption("Set")
         h2.caption("Weight")
         h3.caption("Reps")
@@ -120,11 +121,10 @@ for ex in gym_ex:
             r_key = f"r_{week}_{day}_{ex}_{s}"
             saved = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
             
-            # Initial values from DB or defaults
             curr_w = float(saved["Weight"].iloc[0]) if not saved.empty else 5.0
             curr_r = int(saved["Reps"].iloc[0]) if not saved.empty else 8
             
-            c1, c2, c3, c4 = st.columns([0.8, 2, 2, 1])
+            c1, c2, c3, c4 = st.columns([0.7, 1.5, 1.5, 0.8])
             with c1:
                 st.write(f"**{s}**")
             with c2:
@@ -159,7 +159,7 @@ if abs_ex:
                 dur_key = f"abs_{week}_{day}_{ex}_{set_num}"
                 c1, c2 = st.columns([4, 1]) 
                 with c1:
-                    st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), index=6, key=dur_key, disabled=not can_edit)
+                    st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), index=6, key=dur_key, disabled=not can_edit, label_visibility="collapsed")
                 with c2:
                     if st.button("✅" if is_done else "💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
                         df_save = load_data()
