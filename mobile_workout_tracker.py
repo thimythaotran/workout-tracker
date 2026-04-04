@@ -47,11 +47,11 @@ def load_data():
     try:
         df = pd.read_csv(DATA_FILE)
         if not df.empty:
-            df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-            df = df.dropna(subset=["Date"])
-            df["Date"] = df["Date"].dt.date
+            # Force conversion to datetime then extract the date part
+            df["Date"] = pd.to_datetime(df["Date"]).dt.date
         return df
-    except:
+    except Exception as e:
+        st.error(f"Data Load Error: {e}")
         return pd.DataFrame(columns=["Week","Day","Date","Exercise","Set","Weight","Duration"])
 
 def save_data(df):
@@ -93,40 +93,37 @@ c_w, c_d = st.columns(2)
 with c_w: week = st.selectbox("Week", [1, 2, 3, 4])
 with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 
-# --- UPDATED SMART DATE CASCADING ---
+# --- SMART DATE CASCADING LOGIC ---
 current_day_num = int(day.split()[-1])
 existing_dates = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "Date"]
 
 if not existing_dates.empty:
     calculated_date = existing_dates.iloc[0]
 else:
-    # Look for the CLOSEST day in the week (prioritizing previous days)
     week_data = log_df[log_df["Week"] == week].copy()
     if not week_data.empty:
-        week_data["DayNum"] = week_data["Day"].apply(lambda x: int(x.split()[-1]))
+        # Helper to extract day number from string "Day X"
+        week_data["DayNum"] = week_data["Day"].str.extract('(\d+)').astype(int)
         
-        # Check for any logged days before current selection
+        # Look for closest previous day
         prev_days = week_data[week_data["DayNum"] < current_day_num].sort_values("DayNum", ascending=False)
         
         if not prev_days.empty:
             anchor = prev_days.iloc[0]
-            calculated_date = anchor["Date"] + timedelta(days=(current_day_num - anchor["DayNum"]))
+            calculated_date = anchor["Date"] + timedelta(days=int(current_day_num - anchor["DayNum"]))
         else:
-            # If no previous days, anchor to the first logged day of the week (even if it's in the future)
+            # Fallback to the first day recorded in the week (even if in future)
             first_day = week_data.sort_values("DayNum").iloc[0]
-            calculated_date = first_day["Date"] + timedelta(days=(current_day_num - first_day["DayNum"]))
+            calculated_date = first_day["Date"] + timedelta(days=int(current_day_num - first_day["DayNum"]))
     else:
         calculated_date = date.today()
 
 day_date = st.date_input("Workout Date", value=calculated_date, key=f"dt_{week}_{day}", disabled=not can_edit)
 
 if st.button("💾 Lock Date", disabled=not can_edit):
-    # This creates a "Marker" row so the date is remembered even if no sets are saved yet
     marker = pd.DataFrame({"Week": [week], "Day": [day], "Date": [day_date], "Exercise": ["DAY MARKER"], "Set": [0], "Weight": [0.0], "Duration": [0]})
-    # Clean up any existing records for this week/day/marker and append new date
     new_log = pd.concat([log_df, marker], ignore_index=True).drop_duplicates(subset=["Week", "Day", "Exercise", "Set"], keep="last")
     save_data(new_log)
-    st.success(f"Date anchored. Future days will now offset from {day_date}.")
     st.rerun()
 
 st.divider()
