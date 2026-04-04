@@ -1,5 +1,5 @@
-# VERSION: 2026-04-04 11:05 AM
-# STATUS: Phase 2 - Manual Local Timer + Big Text + Collapsed Abs
+# VERSION: 2026-04-04 11:15 AM
+# STATUS: Phase 2 - Added Reps (0-20) + Organized Set Rows + Removed App Sync
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-GEN_TIMESTAMP = "2026-04-04 11:05 AM" # Static Version Marker
+GEN_TIMESTAMP = "2026-04-04 11:15 AM" 
 
 # ---------------- WORKOUT PLAN ----------------
 workout_plan = {
@@ -29,42 +29,45 @@ ABS_MASTER_LIST = ["Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian T
 # ---------------- DATA ENGINE ----------------
 def load_data():
     if not os.path.exists(DATA_FILE):
-        return pd.DataFrame(columns=["Week","Day","Date","Exercise","Set","Weight","Duration"])
+        return pd.DataFrame(columns=["Week","Day","Date","Exercise","Set","Weight","Reps","Duration"])
     try:
         df = pd.read_csv(DATA_FILE)
         if not df.empty:
             df["Date"] = pd.to_datetime(df["Date"], errors='coerce').dt.date
+            # Ensure Reps column exists for older files
+            if "Reps" not in df.columns:
+                df["Reps"] = 8
         return df
     except Exception:
-        return pd.DataFrame(columns=["Week","Day","Date","Exercise","Set","Weight","Duration"])
+        return pd.DataFrame(columns=["Week","Day","Date","Exercise","Set","Weight","Reps","Duration"])
 
 def save_data(df):
     df.to_csv(DATA_FILE, index=False)
 
-def on_weight_change(week, day, date_val, exercise, set_num, key):
-    new_weight = st.session_state[key]
+def on_data_change(week, day, date_val, exercise, set_num, weight_key, reps_key):
+    weight_val = st.session_state[weight_key]
+    reps_val = st.session_state[reps_key]
     df = load_data()
     df = df[~((df["Week"] == week) & (df["Day"] == day) & (df["Exercise"] == exercise) & (df["Set"] == set_num))]
-    new_row = pd.DataFrame([{"Week": week, "Day": day, "Date": date_val, "Exercise": exercise, "Set": set_num, "Weight": float(new_weight), "Duration": 0}])
+    new_row = pd.DataFrame([{
+        "Week": week, "Day": day, "Date": date_val, "Exercise": exercise, 
+        "Set": set_num, "Weight": float(weight_val), "Reps": int(reps_val), "Duration": 0
+    }])
     df = pd.concat([df, new_row], ignore_index=True)
     save_data(df)
 
 # ---------------- APP UI ----------------
 st.set_page_config(page_title="Workout Tracker", layout="centered")
 
-# Timer State Management
-if "timer_start" not in st.session_state:
-    st.session_state["timer_start"] = None
-if "timer_running" not in st.session_state:
-    st.session_state["timer_running"] = False
+if "timer_start" not in st.session_state: st.session_state["timer_start"] = None
+if "timer_running" not in st.session_state: st.session_state["timer_running"] = False
 
 # UI Header
-col_ref, col_stat = st.columns([1, 2])
+col_ref, col_ver = st.columns([1, 2])
 with col_ref:
     if st.button("🔄 Refresh"): st.rerun()
-with col_stat:
-    # This now shows the static version timestamp from me
-    st.caption(f"Ver: {GEN_TIMESTAMP} | App Sync: {datetime.now().strftime('%H:%M:%S')}")
+with col_ver:
+    st.caption(f"Ver: {GEN_TIMESTAMP}")
 
 password = st.text_input("Enter password", type="password")
 can_edit = password == EDIT_PASSWORD
@@ -74,13 +77,11 @@ c_w, c_d = st.columns(2)
 with c_w: week = st.selectbox("Week", [1, 2, 3, 4])
 with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 
-# --- DATE CALCULATION ---
 current_day_num = int(day.split()[-1])
 saved_marker = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == "DAY MARKER")]
 calculated_date = saved_marker.iloc[0]["Date"] if not saved_marker.empty else date.today()
 day_date = st.date_input("Workout Date", value=calculated_date, key=f"date_picker_{week}_{day}", disabled=not can_edit)
 
-# --- LOCK & SYNC ---
 if st.button("💾 Lock & Sync ALL Future", disabled=not can_edit):
     current_abs_pos = ((week - 1) * 7) + current_day_num
     for w_idx in range(1, 5):
@@ -91,48 +92,62 @@ if st.button("💾 Lock & Sync ALL Future", disabled=not can_edit):
                 new_d = day_date + timedelta(days=int(this_abs_pos - current_abs_pos))
                 log_df.loc[(log_df["Week"] == w_idx) & (log_df["Day"] == d_name), "Date"] = new_d
                 if log_df[(log_df["Week"] == w_idx) & (log_df["Day"] == d_name) & (log_df["Exercise"] == "DAY MARKER")].empty:
-                    marker = pd.DataFrame([{"Week": w_idx, "Day": d_name, "Date": new_d, "Exercise": "DAY MARKER", "Set": 0, "Weight": 0.0, "Duration": 0}])
+                    marker = pd.DataFrame([{"Week": w_idx, "Day": d_name, "Date": new_d, "Exercise": "DAY MARKER", "Set": 0, "Weight": 0.0, "Reps": 0, "Duration": 0}])
                     log_df = pd.concat([log_df, marker], ignore_index=True)
     save_data(log_df)
     st.rerun()
 
 st.divider()
 
-# --- TIMER HELPER FUNCTION (BIGGER TEXT) ---
 def show_timer(key_suffix):
     t_c1, t_c2 = st.columns([3, 1.2])
     with t_c1:
-        if st.session_state["timer_running"] and st.session_state["timer_start"]:
-            elapsed = int(time.time() - st.session_state["timer_start"])
-            st.markdown(f"## ⏱️ `{elapsed}s` Rest")
-        else:
-            st.markdown("## ⏱️ `0s` Rest")
+        elapsed = int(time.time() - st.session_state["timer_start"]) if (st.session_state["timer_running"] and st.session_state["timer_start"]) else 0
+        st.markdown(f"## ⏱️ `{elapsed}s` Rest")
     with t_c2:
-        st.write("") # Padding for alignment
+        st.write("")
         if st.button("Reset Timer", key=f"reset_{key_suffix}", use_container_width=True):
             st.session_state["timer_start"] = time.time()
             st.session_state["timer_running"] = True
             st.rerun()
 
-# --- DATA LOADING ---
 today_data = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
 today_exercises = workout_plan[day]
 gym_ex = [e for e in today_exercises if e not in ABS_MASTER_LIST]
 abs_ex = [e for e in today_exercises if e in ABS_MASTER_LIST]
 
-# ---------------- GYM EXERCISES ----------------
+# ---------------- GYM EXERCISES (WITH REPS) ----------------
 for ex in gym_ex:
     with st.expander(ex):
         show_timer(f"gym_{ex}") 
         st.divider()
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
+        
+        # Header for the set columns
+        h1, h2, h3 = st.columns([1, 2, 2])
+        h1.caption("Set")
+        h2.caption("Weight (lb)")
+        h3.caption("Reps")
+
         for s in range(1, sets_count + 1):
-            key = f"input_{week}_{day}_{ex}_{s}"
+            w_key = f"weight_{week}_{day}_{ex}_{s}"
+            r_key = f"reps_{week}_{day}_{ex}_{s}"
             saved = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
-            val = float(saved["Weight"].iloc[0]) if not saved.empty else 5.0
-            st.selectbox(f"Set {s} (lb) {'✅' if not saved.empty else ''}", [i*2.5 for i in range(1, 61)], 
-                         index=max(0, min(int(val / 2.5) - 1, 59)), key=key, 
-                         disabled=not can_edit, on_change=on_weight_change, args=(week, day, day_date, ex, s, key))
+            
+            s_weight = float(saved["Weight"].iloc[0]) if not saved.empty else 5.0
+            s_reps = int(saved["Reps"].iloc[0]) if not saved.empty else 8
+            
+            c1, c2, c3 = st.columns([1, 2, 2])
+            with c1:
+                st.write(f"**{s}** {'✅' if not saved.empty else ''}")
+            with c2:
+                st.selectbox("Weight", [i*2.5 for i in range(1, 61)], index=max(0, min(int(s_weight / 2.5) - 1, 59)), 
+                             key=w_key, disabled=not can_edit, label_visibility="collapsed",
+                             on_change=on_data_change, args=(week, day, day_date, ex, s, w_key, r_key))
+            with c3:
+                st.selectbox("Reps", list(range(0, 21)), index=s_reps, 
+                             key=r_key, disabled=not can_edit, label_visibility="collapsed",
+                             on_change=on_data_change, args=(week, day, day_date, ex, s, w_key, r_key))
 
 # ---------------- ABS SECTION (COLLAPSED) ----------------
 if abs_ex:
@@ -152,7 +167,7 @@ if abs_ex:
                     if st.button("✅" if is_done else "💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
                         df_save = load_data()
                         df_save = df_save[~((df_save["Week"]==week) & (df_save["Day"]==day) & (df_save["Exercise"]==ex) & (df_save["Set"]==set_num))]
-                        new_row = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Duration":st.session_state[dur_key]}])
+                        new_row = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Reps":0, "Duration":st.session_state[dur_key]}])
                         save_data(pd.concat([df_save, new_row], ignore_index=True))
                         st.rerun()
             st.divider()
@@ -162,10 +177,9 @@ st.subheader("📊 Summary")
 summary_view = today_data[today_data["Exercise"] != "DAY MARKER"]
 if not summary_view.empty:
     display_df = summary_view.sort_values(by=["Exercise", "Set"]).copy()
-    display_df["Performance"] = display_df.apply(lambda r: f"{r['Weight']} lb" if r["Weight"] > 0 else f"{r['Duration']} sec", axis=1)
+    display_df["Performance"] = display_df.apply(lambda r: f"{r['Weight']} lb x {r['Reps']}" if r["Weight"] > 0 else f"{r['Duration']} sec", axis=1)
     st.dataframe(display_df[["Exercise", "Set", "Performance"]], use_container_width=True, hide_index=True)
 
-# AUTO-REFRESH TICKER
 if st.session_state["timer_running"]:
     time.sleep(1)
     st.rerun()
