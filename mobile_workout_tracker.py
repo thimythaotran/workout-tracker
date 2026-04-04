@@ -48,12 +48,8 @@ else:
 
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
 
-# --- VERSION TIMESTAMP ---
-if not log_df.empty:
-    last_update = log_df["Date"].max()
-else:
-    last_update = datetime.now()
-st.markdown(f"🕒 **Version Timestamp:** {pd.to_datetime(last_update).strftime('%Y-%m-%d %H:%M:%S')}")
+# --- LAST UPDATE TIMESTAMP ---
+st.markdown(f"🕒 **Last Update:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
 
@@ -67,9 +63,14 @@ if not can_edit:
 week = st.selectbox("Select Week", [1, 2, 3, 4])
 day = st.selectbox("Select Day", list(workout_plan.keys()))
 
-# --- DATE ---
+# --- DATE INPUT (fixed) ---
 existing_dates = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]["Date"]
-default_date = existing_dates.max().date() if not existing_dates.empty else date.today()
+
+if not existing_dates.empty and pd.notna(existing_dates.max()):
+    default_date = pd.to_datetime(existing_dates.max()).date()
+else:
+    default_date = date.today()
+
 day_date = st.date_input(
     "Date for this Day",
     value=default_date,
@@ -89,7 +90,7 @@ for ex in workout_plan[day]:
 
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
-
+                
                 if weight_key not in st.session_state:
                     prev_weight = log_df.loc[
                         (log_df["Week"]==week) & (log_df["Day"]==day) &
@@ -121,7 +122,7 @@ for ex in workout_plan[day]:
                     log_df.to_csv(DATA_FILE, index=False)
                     st.success(f"Saved {ex} Set {s} ({weight} lbs)")
 
-# --- ABS EXERCISES GROUPED ---
+# --- ABS EXERCISES ---
 if any(ex in workout_plan[day] for ex in abs_exercises):
     with st.expander("💪 Abs Exercises"):
         for set_num in range(1, 3):
@@ -148,8 +149,6 @@ if any(ex in workout_plan[day] for ex in abs_exercises):
                         )
 
                     if completed and can_edit:
-                        log_df = log_df[~((log_df["Week"]==week) & (log_df["Day"]==day) &
-                                          (log_df["Exercise"]==ex) & (log_df["Set"]==set_num))]
                         log_df = pd.concat([log_df, pd.DataFrame({
                             "Week": [week],
                             "Day": [day],
