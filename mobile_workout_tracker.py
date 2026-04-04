@@ -92,16 +92,18 @@ if st.button("💾 Lock & Sync ALL Future", disabled=not can_edit):
 
 st.divider()
 
-# --- TIMER HELPER FUNCTION ---
+# --- TIMER HELPER FUNCTION (BIGGER TEXT) ---
 def show_timer(key_suffix):
     t_c1, t_c2 = st.columns([3, 1.2])
     with t_c1:
         if st.session_state["timer_running"] and st.session_state["timer_start"]:
             elapsed = int(time.time() - st.session_state["timer_start"])
-            st.markdown(f"⏱️ **Rest Lapse: `{elapsed}s`**")
+            # Using H2 for bigger visibility
+            st.markdown(f"## ⏱️ `{elapsed}s` Rest")
         else:
-            st.markdown("⏱️ **Rest Lapse: `0s`**")
+            st.markdown("## ⏱️ `0s` Rest")
     with t_c2:
+        st.write("") # Padding
         if st.button("Reset Timer", key=f"reset_{key_suffix}", use_container_width=True):
             st.session_state["timer_start"] = time.time()
             st.session_state["timer_running"] = True
@@ -116,7 +118,7 @@ abs_ex = [e for e in today_exercises if e in ABS_MASTER_LIST]
 # ---------------- GYM EXERCISES ----------------
 for ex in gym_ex:
     with st.expander(ex):
-        show_timer(f"gym_{ex}") # Timer inside each expander
+        show_timer(f"gym_{ex}") 
         st.divider()
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
         for s in range(1, sets_count + 1):
@@ -127,10 +129,10 @@ for ex in gym_ex:
                          index=max(0, min(int(val / 2.5) - 1, 59)), key=key, 
                          disabled=not can_edit, on_change=on_weight_change, args=(week, day, day_date, ex, s, key))
 
-# ---------------- ABS SECTION ----------------
+# ---------------- ABS SECTION (STARTS COLLAPSED) ----------------
 if abs_ex:
-    with st.expander("💪 Abs Section", expanded=True):
-        show_timer("abs_section") # Timer inside Abs expander
+    with st.expander("💪 Abs Section", expanded=False):
+        show_timer("abs_section") 
         st.divider()
         for set_num in [1, 2]:
             st.caption(f"SET {set_num}")
