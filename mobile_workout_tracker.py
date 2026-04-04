@@ -47,7 +47,7 @@ def on_weight_change(week, day, date_val, exercise, set_num, key):
 # ---------------- APP UI ----------------
 st.set_page_config(page_title="Workout Tracker", layout="centered")
 
-# Initialize Timer State if not present
+# Initialize Timer State
 if "timer_start" not in st.session_state:
     st.session_state["timer_start"] = None
 
@@ -86,6 +86,7 @@ else:
 
 day_date = st.date_input("Workout Date", value=calculated_date, key=f"date_picker_{week}_{day}", disabled=not can_edit)
 
+# --- LOCK & SYNC BUTTON ---
 already_synced = not saved_marker.empty and saved_marker.iloc[0]["Date"] == day_date
 button_label = "✅ Schedule Synced" if already_synced else "💾 Lock & Sync ALL Future"
 
@@ -106,18 +107,20 @@ if st.button(button_label, disabled=not can_edit or already_synced):
 
 st.divider()
 
-# ---------------- MANUAL REST TIMER ----------------
+# ---------------- LIVE REST TIMER ----------------
 t_col1, t_col2 = st.columns([3, 1.2])
 with t_col1:
-    if st.session_state["timer_start"] is not None:
-        rest_time = int(time.time() - st.session_state["timer_start"])
-        st.subheader(f"⏱️ Rest Lapse: `{rest_time}s`")
-    else:
-        st.subheader("⏱️ Rest Lapse: `0s`")
+    timer_placeholder = st.empty()
 with t_col2:
     if st.button("Reset Timer", use_container_width=True):
         st.session_state["timer_start"] = time.time()
-        st.rerun()
+
+# This block makes the timer tick live
+if st.session_state["timer_start"] is not None:
+    elapsed = int(time.time() - st.session_state["timer_start"])
+    timer_placeholder.subheader(f"⏱️ Rest Lapse: `{elapsed}s`")
+else:
+    timer_placeholder.subheader("⏱️ Rest Lapse: `0s`")
 
 # --- DATA LOADING ---
 today_data = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
@@ -167,3 +170,8 @@ if not summary_view.empty:
     display_df = summary_view.sort_values(by=["Exercise", "Set"]).copy()
     display_df["Performance"] = display_df.apply(lambda r: f"{r['Weight']} lb" if r["Weight"] > 0 else f"{r['Duration']} sec", axis=1)
     st.dataframe(display_df[["Exercise", "Set", "Performance"]], use_container_width=True, hide_index=True)
+
+# Auto-Refresh Script for Timer
+if st.session_state["timer_start"] is not None:
+    time.sleep(1)
+    st.rerun()
