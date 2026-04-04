@@ -1,3 +1,7 @@
+# VERSION: 2026-04-04 11:05 AM
+# STATUS: Phase 2 - Manual Local Timer + Big Text + Collapsed Abs
+# ----------------------------------------------------------------
+
 import streamlit as st
 import pandas as pd
 import os
@@ -7,6 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
+GEN_TIMESTAMP = "2026-04-04 11:05 AM" # Static Version Marker
 
 # ---------------- WORKOUT PLAN ----------------
 workout_plan = {
@@ -58,7 +63,8 @@ col_ref, col_stat = st.columns([1, 2])
 with col_ref:
     if st.button("🔄 Refresh"): st.rerun()
 with col_stat:
-    st.caption(f"Last Sync: {datetime.now().strftime('%H:%M:%S')}")
+    # This now shows the static version timestamp from me
+    st.caption(f"Ver: {GEN_TIMESTAMP} | App Sync: {datetime.now().strftime('%H:%M:%S')}")
 
 password = st.text_input("Enter password", type="password")
 can_edit = password == EDIT_PASSWORD
@@ -98,12 +104,11 @@ def show_timer(key_suffix):
     with t_c1:
         if st.session_state["timer_running"] and st.session_state["timer_start"]:
             elapsed = int(time.time() - st.session_state["timer_start"])
-            # Using H2 for bigger visibility
             st.markdown(f"## ⏱️ `{elapsed}s` Rest")
         else:
             st.markdown("## ⏱️ `0s` Rest")
     with t_c2:
-        st.write("") # Padding
+        st.write("") # Padding for alignment
         if st.button("Reset Timer", key=f"reset_{key_suffix}", use_container_width=True):
             st.session_state["timer_start"] = time.time()
             st.session_state["timer_running"] = True
@@ -129,7 +134,7 @@ for ex in gym_ex:
                          index=max(0, min(int(val / 2.5) - 1, 59)), key=key, 
                          disabled=not can_edit, on_change=on_weight_change, args=(week, day, day_date, ex, s, key))
 
-# ---------------- ABS SECTION (STARTS COLLAPSED) ----------------
+# ---------------- ABS SECTION (COLLAPSED) ----------------
 if abs_ex:
     with st.expander("💪 Abs Section", expanded=False):
         show_timer("abs_section") 
