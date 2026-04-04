@@ -99,9 +99,8 @@ for ex in workout_plan[day]:
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
 
-                # --- FIXED CASCADING WEIGHT ---
+                # Only pre-set session_state if key not exists (avoids resetting user choice)
                 if weight_key not in st.session_state:
-                    # If not yet selected, use last_weight
                     st.session_state[weight_key] = st.session_state[f"{week}_{day}_{ex}_last_weight"]
 
                 weight = st.selectbox(
@@ -112,7 +111,7 @@ for ex in workout_plan[day]:
                     disabled=not can_edit
                 )
 
-                # Update last_weight only if this set hasn't been manually changed yet
+                # Update last_weight for next set only if current set still at default
                 if st.session_state[weight_key] == st.session_state[f"{week}_{day}_{ex}_last_weight"]:
                     st.session_state[f"{week}_{day}_{ex}_last_weight"] = weight
 
@@ -137,7 +136,7 @@ if any(ex in workout_plan[day] for ex in abs_exercises):
             st.markdown(f"### Set {set_num}")
             for ex in workout_plan[day]:
                 if ex in abs_exercises:
-                    col1, col2 = st.columns([2, 1])
+                    col1, col2 = st.columns([2, 1])  # combobox larger, checkbox smaller
                     with col1:
                         duration = st.selectbox(
                             f"{ex} duration (seconds)",
