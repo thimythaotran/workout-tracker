@@ -1,5 +1,5 @@
-# VERSION: 2026-04-04 07:55 PM
-# STATUS: Phase 2 - Absolute Database-to-Row Mapping
+# VERSION: 2026-04-04 08:10 PM
+# STATUS: Phase 2 - Absolute Row Isolation Logic (Fix for Independent Save)
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- DATA ENGINE ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-GEN_TIMESTAMP = "2026-04-04 07:55 PM" 
+GEN_TIMESTAMP = "2026-04-04 08:10 PM" 
 
 def load_data():
     if not os.path.exists(DATA_FILE):
@@ -33,7 +33,7 @@ st.set_page_config(page_title="Workout Tracker", layout="centered")
 if "timer_start" not in st.session_state: st.session_state["timer_start"] = None
 if "timer_running" not in st.session_state: st.session_state["timer_running"] = False
 
-# Header UI
+# Header
 col_ref, col_ver = st.columns([1, 2])
 with col_ref:
     if st.button("🔄 Refresh"): st.rerun()
@@ -126,49 +126,43 @@ for ex in gym_ex:
         for s in range(1, sets_count + 1):
             w_key, r_key = f"w_{week}_{day}_{ex}_{s}", f"r_{week}_{day}_{ex}_{s}"
             
-            # --- CRITICAL FIX: INDEPENDENT DATA FILTERING ---
-            # We filter the database for THIS EXACT set number.
-            this_set_db = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
+            # ISOLATED DB FETCH: Filter by exercise AND set number
+            specific_row = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
             
-            # Initialize session state from DB only if it doesn't exist
             if w_key not in st.session_state:
-                st.session_state[w_key] = float(this_set_db["Weight"].iloc[0]) if not this_set_db.empty else 5.0
+                st.session_state[w_key] = float(specific_row["Weight"].iloc[0]) if not specific_row.empty else 5.0
             if r_key not in st.session_state:
-                st.session_state[r_key] = int(this_set_db["Reps"].iloc[0]) if not this_set_db.empty else 8
+                st.session_state[r_key] = int(specific_row["Reps"].iloc[0]) if not specific_row.empty else 8
             
             c1, c2, c3, c4 = st.columns([0.7, 1.5, 1.5, 0.8])
             with c1: st.write(f"**{s}**")
-            with c2: 
-                st.selectbox("W", [i*2.5 for i in range(1, 61)], key=w_key, disabled=not can_edit, label_visibility="collapsed")
-            with c3: 
-                st.selectbox("R", list(range(0, 21)), key=r_key, disabled=not can_edit, label_visibility="collapsed")
+            with c2: st.selectbox("W", [i*2.5 for i in range(1, 61)], key=w_key, disabled=not can_edit, label_visibility="collapsed")
+            with c3: st.selectbox("R", list(range(0, 21)), key=r_key, disabled=not can_edit, label_visibility="collapsed")
             with c4:
-                # --- INDEPENDENT BUTTON LOGIC ---
-                # Check 1: Does the row exist for THIS set number (s)?
-                # Check 2: Does the screen value match that SPECIFIC row?
-                is_saved = False
-                if not this_set_db.empty:
-                    val_w = float(this_set_db["Weight"].iloc[0])
-                    val_r = int(this_set_db["Reps"].iloc[0])
-                    if st.session_state[w_key] == val_w and st.session_state[r_key] == val_r:
-                        is_saved = True
+                # RIGID VALIDATION: Row must exist + Weight must match + Reps must match
+                is_row_saved = False
+                if not specific_row.empty:
+                    db_w = float(specific_row["Weight"].iloc[0])
+                    db_r = int(specific_row["Reps"].iloc[0])
+                    if st.session_state[w_key] == db_w and st.session_state[r_key] == db_r:
+                        is_row_saved = True
                 
-                btn_label = "✅" if is_saved else "💾"
+                label = "✅" if is_row_saved else "💾"
                 
-                if st.button(btn_label, key=f"btn_{w_key}", disabled=not can_edit):
-                    df_current = load_data()
-                    # Remove ONLY this specific set for this specific exercise
-                    df_current = df_current[~((df_current["Week"]==week) & 
-                                              (df_current["Day"]==day) & 
-                                              (df_current["Exercise"]==ex) & 
-                                              (df_current["Set"]==s))]
+                if st.button(label, key=f"btn_{w_key}", disabled=not can_edit):
+                    df_upd = load_data()
+                    # Delete only this specific set's record
+                    df_upd = df_upd[~((df_upd["Week"] == week) & 
+                                      (df_upd["Day"] == day) & 
+                                      (df_upd["Exercise"] == ex) & 
+                                      (df_upd["Set"] == s))]
                     
-                    new_entry = pd.DataFrame([{
+                    new_line = pd.DataFrame([{
                         "Week": week, "Day": day, "Date": day_date, "Exercise": ex, 
                         "Set": s, "Weight": float(st.session_state[w_key]), 
                         "Reps": int(st.session_state[r_key]), "Duration": 0
                     }])
-                    save_data(pd.concat([df_current, new_entry], ignore_index=True))
+                    save_data(pd.concat([df_upd, new_line], ignore_index=True))
                     st.rerun()
 
 # ---------------- ABS SECTION ----------------
@@ -180,20 +174,20 @@ if abs_ex:
             st.caption(f"SET {set_num}")
             for ex in abs_ex:
                 dur_key = f"abs_{week}_{day}_{ex}_{set_num}"
-                this_abs_db = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == set_num)]
+                abs_row = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == set_num)]
                 
                 if dur_key not in st.session_state:
-                    st.session_state[dur_key] = int(this_abs_db["Duration"].iloc[0]) if not this_abs_db.empty else 30
+                    st.session_state[dur_key] = int(abs_row["Duration"].iloc[0]) if not abs_row.empty else 30
                 
                 c1, c2 = st.columns([4, 1]) 
                 with c1: st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), key=dur_key, disabled=not can_edit, label_visibility="collapsed")
                 with c2:
-                    abs_saved = (not this_abs_db.empty and int(st.session_state[dur_key]) == int(this_abs_db["Duration"].iloc[0]))
-                    if st.button("✅" if abs_saved else "💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
-                        df_save = load_data()
-                        df_save = df_save[~((df_save["Week"]==week) & (df_save["Day"]==day) & (df_save["Exercise"]==ex) & (df_save["Set"]==set_num))]
-                        new_row = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Reps":0, "Duration":st.session_state[dur_key]}])
-                        save_data(pd.concat([df_save, new_row], ignore_index=True))
+                    is_abs_saved = (not abs_row.empty and int(st.session_state[dur_key]) == int(abs_row["Duration"].iloc[0]))
+                    if st.button("✅" if is_abs_saved else "💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
+                        df_abs = load_data()
+                        df_abs = df_abs[~((df_abs["Week"]==week) & (df_abs["Day"]==day) & (df_abs["Exercise"]==ex) & (df_abs["Set"]==set_num))]
+                        new_abs = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Reps":0, "Duration":st.session_state[dur_key]}])
+                        save_data(pd.concat([df_abs, new_abs], ignore_index=True))
                         st.rerun()
             st.divider()
 
