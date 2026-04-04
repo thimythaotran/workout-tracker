@@ -46,13 +46,11 @@ def load_data():
         try:
             df = pd.read_csv(DATA_FILE)
             if not df.empty:
-                # errors="coerce" handles messy data, .dt.date makes it widget-friendly
                 df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
                 df = df.dropna(subset=["Date"])
                 df["Date"] = df["Date"].dt.date
             return df
         except Exception:
-            # If the file is totally corrupted, return empty DF
             return pd.DataFrame(columns=["Week","Day","Date","Exercise","Set","Weight","Duration"])
     return pd.DataFrame(columns=["Week","Day","Date","Exercise","Set","Weight","Duration"])
 
@@ -75,15 +73,8 @@ week = st.selectbox("Week", [1, 2, 3, 4])
 day = st.selectbox("Day", list(workout_plan.keys()))
 
 # ---------------- DATE HANDLING ----------------
-# Check if a date is already logged for this specific workout
-existing_dates = log_df.loc[
-    (log_df["Week"] == week) & (log_df["Day"] == day), "Date"
-]
-
-if not existing_dates.empty:
-    default_date = existing_dates.iloc[0]
-else:
-    default_date = date.today()
+existing_dates = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "Date"]
+default_date = existing_dates.iloc[0] if not existing_dates.empty else date.today()
 
 day_date = st.date_input(
     "Workout Date",
@@ -92,14 +83,11 @@ day_date = st.date_input(
     disabled=not can_edit
 )
 
-# ---------------- SAVE DAY BUTTON ----------------
 if st.button("💾 Save/Update Date", disabled=not can_edit):
-    # This ensures that even if you haven't done an exercise, the date is logged
     new_marker = pd.DataFrame({
         "Week": [week], "Day": [day], "Date": [day_date],
         "Exercise": ["DAY MARKER"], "Set": [0], "Weight": [0], "Duration": [0]
     })
-    # Update existing dates for this session too
     log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "Date"] = day_date
     log_df = pd.concat([log_df, new_marker], ignore_index=True).drop_duplicates(
         subset=["Week", "Day", "Exercise", "Set"], keep="last"
@@ -119,28 +107,45 @@ for ex in workout_plan[day]:
 
     with st.expander(ex):
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
+        
+        # Track the weight from the previous set for cascading
+        last_weight_seen = None
 
         for s in range(1, sets_count + 1):
             key = f"input_{week}_{day}_{ex}_{s}"
             
-            # Look for previous weight in the log
-            prev = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & 
-                          (log_df["Exercise"] == ex) & (log_df["Set"] == s)]
+            # Find if there is a saved value in the CSV
+            prev_in_log = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & 
+                                 (log_df["Exercise"] == ex) & (log_df["Set"] == s)]
             
-            val_idx = 3 # Default to 10kg (index 3 in our list)
-            if not prev.empty:
-                try:
-                    val_idx = int(float(prev["Weight"].iloc[0]) / 2.5) - 1
-                except: pass
+            # Determine the starting weight for the selectbox
+            if not prev_in_log.empty:
+                current_val = float(prev_in_log["Weight"].iloc[0])
+            elif key in st.session_state:
+                current_val = st.session_state[key]
+            elif last_weight_seen is not None:
+                current_val = last_weight_seen
+            else:
+                current_val = 10.0 # Standard fallback
 
-            weight = st.selectbox(f"Set {s} weight (kg)", [i*2.5 for i in range(1, 61)], 
-                                 index=max(0, val_idx), key=key, disabled=not can_edit)
+            # Calculate dropdown index
+            val_idx = int(current_val / 2.5) - 1
+            val_idx = max(0, min(val_idx, 59))
+
+            weight = st.selectbox(
+                f"Set {s} weight (kg)", 
+                [i*2.5 for i in range(1, 61)], 
+                index=val_idx, 
+                key=key, 
+                disabled=not can_edit
+            )
+            
+            # Update cascading variable for the next set
+            last_weight_seen = weight
 
             if st.button(f"Save Set {s}", key=f"btn_{key}", disabled=not can_edit):
-                # Remove old record
                 log_df = log_df[~((log_df["Week"] == week) & (log_df["Day"] == day) & 
                                   (log_df["Exercise"] == ex) & (log_df["Set"] == s))]
-                # Add new
                 new_row = pd.DataFrame({
                     "Week": [week], "Day": [day], "Date": [day_date],
                     "Exercise": [ex], "Set": [s], "Weight": [weight], "Duration": [0]
@@ -173,11 +178,9 @@ if any(ex in abs_exercises for ex in workout_plan[day]):
                         log_df.to_csv(DATA_FILE, index=False)
                         st.success(f"Saved {ex}")
 
-# ---------------- SUMMARY TABLE ----------------
+# ---------------- SUMMARY ----------------
 st.divider()
 st.subheader("📊 Today's Progress")
 current_view = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] != "DAY MARKER")]
 if not current_view.empty:
-    st.dataframe(current_view[["Exercise", "Set", "Weight", "Duration"]], use_container_width=True)
-else:
-    st.write("No exercises logged for this day yet.")
+    st.dataframe(current_view[["Exercise", "Set", "Weight", "Duration"]].sort_values(by=["Exercise", "Set"]), use_container_width=True)
