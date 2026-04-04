@@ -47,10 +47,13 @@ def on_weight_change(week, day, date_val, exercise, set_num, key):
 # ---------------- APP UI ----------------
 st.set_page_config(page_title="Workout Tracker", layout="centered")
 
-# Initialize Timer State
+# Timer State Management
 if "timer_start" not in st.session_state:
     st.session_state["timer_start"] = None
+if "timer_running" not in st.session_state:
+    st.session_state["timer_running"] = False
 
+# Refresh & Sync UI
 col_ref, col_stat = st.columns([1, 2])
 with col_ref:
     if st.button("🔄 Refresh"): st.rerun()
@@ -72,25 +75,12 @@ saved_marker = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_d
 if not saved_marker.empty:
     calculated_date = saved_marker.iloc[0]["Date"]
 else:
-    if not log_df.empty:
-        log_copy = log_df.copy()
-        log_copy["DayNum"] = log_copy["Day"].str.extract('(\d+)').astype(int)
-        log_copy["AbsPos"] = ((log_copy["Week"] - 1) * 7) + log_copy["DayNum"]
-        current_abs_pos = ((week - 1) * 7) + current_day_num
-        log_copy = log_copy.sort_values("AbsPos", ascending=False)
-        prev_anchors = log_copy[log_copy["AbsPos"] < current_abs_pos]
-        anchor = prev_anchors.iloc[0] if not prev_anchors.empty else log_copy.sort_values("AbsPos").iloc[0]
-        calculated_date = anchor["Date"] + timedelta(days=int(current_abs_pos - anchor["AbsPos"]))
-    else:
-        calculated_date = date.today()
+    calculated_date = date.today()
 
 day_date = st.date_input("Workout Date", value=calculated_date, key=f"date_picker_{week}_{day}", disabled=not can_edit)
 
-# --- LOCK & SYNC BUTTON ---
-already_synced = not saved_marker.empty and saved_marker.iloc[0]["Date"] == day_date
-button_label = "✅ Schedule Synced" if already_synced else "💾 Lock & Sync ALL Future"
-
-if st.button(button_label, disabled=not can_edit or already_synced):
+# --- LOCK & SYNC ---
+if st.button("💾 Lock & Sync ALL Future", disabled=not can_edit):
     current_abs_pos = ((week - 1) * 7) + current_day_num
     for w_idx in range(1, 5):
         for d_idx in range(1, 8):
@@ -107,20 +97,21 @@ if st.button(button_label, disabled=not can_edit or already_synced):
 
 st.divider()
 
-# ---------------- LIVE REST TIMER ----------------
+# ---------------- REST TIMER ----------------
 t_col1, t_col2 = st.columns([3, 1.2])
+
 with t_col1:
-    timer_placeholder = st.empty()
+    if st.session_state["timer_running"] and st.session_state["timer_start"]:
+        elapsed = int(time.time() - st.session_state["timer_start"])
+        st.subheader(f"⏱️ Rest Lapse: `{elapsed}s`")
+    else:
+        st.subheader("⏱️ Rest Lapse: `0s`")
+
 with t_col2:
     if st.button("Reset Timer", use_container_width=True):
         st.session_state["timer_start"] = time.time()
-
-# This block makes the timer tick live
-if st.session_state["timer_start"] is not None:
-    elapsed = int(time.time() - st.session_state["timer_start"])
-    timer_placeholder.subheader(f"⏱️ Rest Lapse: `{elapsed}s`")
-else:
-    timer_placeholder.subheader("⏱️ Rest Lapse: `0s`")
+        st.session_state["timer_running"] = True
+        st.rerun()
 
 # --- DATA LOADING ---
 today_data = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
@@ -132,14 +123,13 @@ abs_ex = [e for e in today_exercises if e in ABS_MASTER_LIST]
 for ex in gym_ex:
     with st.expander(ex):
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
-        last_val = 5.0
         for s in range(1, sets_count + 1):
             key = f"input_{week}_{day}_{ex}_{s}"
             saved = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
-            val = float(saved["Weight"].iloc[0]) if not saved.empty else (st.session_state[key] if key in st.session_state else last_val)
-            st.selectbox(f"Set {s} (lb) {'✅' if not saved.empty else ''}", [i*2.5 for i in range(1, 61)], index=max(0, min(int(val / 2.5) - 1, 59)), key=key, 
+            val = float(saved["Weight"].iloc[0]) if not saved.empty else 5.0
+            st.selectbox(f"Set {s} (lb) {'✅' if not saved.empty else ''}", [i*2.5 for i in range(1, 61)], 
+                         index=max(0, min(int(val / 2.5) - 1, 59)), key=key, 
                          disabled=not can_edit, on_change=on_weight_change, args=(week, day, day_date, ex, s, key))
-            last_val = st.session_state[key]
 
 # ---------------- ABS SECTION ----------------
 if abs_ex:
@@ -150,7 +140,6 @@ if abs_ex:
                 saved_abs = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == set_num)]
                 is_done = not saved_abs.empty
                 dur_key = f"abs_{week}_{day}_{ex}_{set_num}"
-                
                 c1, c2 = st.columns([4, 1]) 
                 with c1:
                     st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), index=6, key=dur_key, disabled=not can_edit)
@@ -171,7 +160,7 @@ if not summary_view.empty:
     display_df["Performance"] = display_df.apply(lambda r: f"{r['Weight']} lb" if r["Weight"] > 0 else f"{r['Duration']} sec", axis=1)
     st.dataframe(display_df[["Exercise", "Set", "Performance"]], use_container_width=True, hide_index=True)
 
-# Auto-Refresh Script for Timer
-if st.session_state["timer_start"] is not None:
+# THE CLOCK TICKER - ONLY RUNS IF TIMER IS ON
+if st.session_state["timer_running"]:
     time.sleep(1)
     st.rerun()
