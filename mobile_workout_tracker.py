@@ -6,7 +6,7 @@ from datetime import date
 # --- SETTINGS ---
 DATA_FILE = "workout_log.csv"
 
-# --- WORKOUT PLAN (Updated with full exercises) ---
+# --- WORKOUT PLAN ---
 workout_plan = {
     "Day 1": [
         "Flat Bench Press", "Incline Bench Press", "Cable Flies",
@@ -69,38 +69,17 @@ day_date = st.date_input("Date for this Day", value=default_date, key=f"{week}_{
 
 # --- SHOW EXERCISES ---
 st.subheader(f"Week {week} - {day} ({day_date})")
+
+abs_exercises = [
+    "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+    "Russian Twists", "Mountain Climber Twists", "Flutter Kicks",
+    "Abs Crunches", "Plank", "Leg Raises"
+]
+
+# Non-abs exercises first
 for ex in workout_plan[day]:
-    with st.expander(ex):
-        # Check if exercise is an abs exercise
-        abs_exercises = [
-            "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
-            "Russian Twists", "Mountain Climber Twists", "Flutter Kicks",
-            "Abs Crunches", "Plank", "Leg Raises"
-        ]
-        if ex in abs_exercises:
-            for set_num in range(1, 3):  # 2 sets
-                st.write(f"Set {set_num}")
-                duration = st.selectbox(
-                    f"Duration for {ex} (seconds) - Set {set_num}",
-                    list(range(1, 61)),
-                    index=29,  # default 30 seconds
-                    key=f"{week}_{day}_{ex}_set{set_num}_duration"
-                )
-                completed = st.checkbox(f"Completed {ex} - Set {set_num}", key=f"{week}_{day}_{ex}_set{set_num}_completed")
-                if completed:
-                    log_df = pd.concat([log_df, pd.DataFrame({
-                        "Week": [week],
-                        "Day": [day],
-                        "Date": [day_date],
-                        "Exercise": [ex],
-                        "Set": [set_num],
-                        "Weight": [0],
-                        "Duration": [duration],
-                        "Completed": [True]
-                    })], ignore_index=True)
-                    log_df.to_csv(DATA_FILE, index=False)
-                    st.success(f"Saved {ex} Set {set_num} ({duration}s)")
-        else:
+    if ex not in abs_exercises:
+        with st.expander(ex):
             sets = st.number_input(f"Number of sets for {ex}", min_value=1, max_value=10, value=4, key=f"{week}_{day}_{ex}_sets")
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
@@ -118,6 +97,34 @@ for ex in workout_plan[day]:
                     })], ignore_index=True)
                     log_df.to_csv(DATA_FILE, index=False)
                     st.success(f"Saved {ex} Set {s} ({weight} lbs)")
+
+# --- Abs exercises grouped ---
+if any(ex in workout_plan[day] for ex in abs_exercises):
+    with st.expander("💪 Abs Exercises"):
+        for ex in workout_plan[day]:
+            if ex in abs_exercises:
+                st.markdown(f"**{ex}**")
+                for set_num in range(1, 3):  # 2 sets
+                    duration = st.selectbox(
+                        f"Duration for {ex} - Set {set_num} (seconds)",
+                        list(range(1, 61)),
+                        index=29,  # default 30 seconds
+                        key=f"{week}_{day}_{ex}_set{set_num}_duration"
+                    )
+                    completed = st.checkbox(f"Completed {ex} - Set {set_num}", key=f"{week}_{day}_{ex}_set{set_num}_completed")
+                    if completed:
+                        log_df = pd.concat([log_df, pd.DataFrame({
+                            "Week": [week],
+                            "Day": [day],
+                            "Date": [day_date],
+                            "Exercise": [ex],
+                            "Set": [set_num],
+                            "Weight": [0],
+                            "Duration": [duration],
+                            "Completed": [True]
+                        })], ignore_index=True)
+                        log_df.to_csv(DATA_FILE, index=False)
+                        st.success(f"Saved {ex} Set {set_num} ({duration}s)")
 
 # --- VIEW LOG ---
 st.subheader("📊 Your Progress")
