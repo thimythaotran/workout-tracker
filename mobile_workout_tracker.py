@@ -49,6 +49,10 @@ else:
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
 st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
 
+# --- LAST UPDATE TIMESTAMP ---
+from datetime import datetime
+st.markdown(f"🕒 **Last Update:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
 # --- PASSWORD ---
 user_password = st.text_input("Enter password to edit:", type="password")
 can_edit = user_password == EDIT_PASSWORD
