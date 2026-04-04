@@ -9,36 +9,20 @@ EDIT_PASSWORD = "1"
 
 # ---------------- WORKOUT PLAN ----------------
 workout_plan = {
-    "Day 1": ["Flat Bench Press","Incline Bench Press","Cable Flies",
-              "Cable Tricep Extensions","Skull Crushers","Dips","Push Ups",
-              "Leg Drops","Reverse Leg Crunches","Sit-Up Twists",
-              "Russian Twists","Mountain Climber Twists","Flutter Kicks"],
-    "Day 2": ["Straight Bar Deadlift","Seated Rows","Lat Pull Downs",
-              "One Arm Dumbbell Rows","DB Bicep Curl","Hammer Curls",
-              "Concentration Curls","Leg Drops","Reverse Leg Crunches",
-              "Sit-Up Twists","Russian Twists","Mountain Climber Twists",
-              "Flutter Kicks"],
-    "Day 3": ["Squat","Leg Extensions","Leg Curls","Calf Raises",
-              "Leg Drops","Reverse Leg Crunches","Sit-Up Twists",
-              "Russian Twists","Mountain Climber Twists","Flutter Kicks"],
-    "Day 4": ["Shoulder Press","Lateral Raises","Front Raises","Shrugs",
-              "Leg Drops","Reverse Leg Crunches","Sit-Up Twists",
-              "Russian Twists","Mountain Climber Twists","Flutter Kicks"],
-    "Day 5": ["Deadlift","Romanian Deadlift","Hamstring Curls","Calf Raises",
-              "Leg Drops","Reverse Leg Crunches","Sit-Up Twists",
-              "Russian Twists","Mountain Climber Twists","Flutter Kicks"],
-    "Day 6": ["Chest Dips","Push-ups","Tricep Dips","Cable Flies",
-              "Leg Drops","Reverse Leg Crunches","Sit-Up Twists",
-              "Russian Twists","Mountain Climber Twists","Flutter Kicks"],
-    "Day 7": ["Abs Crunches","Plank","Leg Raises","Russian Twists",
-              "Mountain Climber Twists","Flutter Kicks"]
+    f"Day {i}": [] for i in range(1, 8) # Placeholder for logic, using your defined plans below
+}
+# (Keeping your original workout_plan dictionary structure)
+workout_plan = {
+    "Day 1": ["Flat Bench Press","Incline Bench Press","Cable Flies","Cable Tricep Extensions","Skull Crushers","Dips","Push Ups","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
+    "Day 2": ["Straight Bar Deadlift","Seated Rows","Lat Pull Downs","One Arm Dumbbell Rows","DB Bicep Curl","Hammer Curls","Concentration Curls","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
+    "Day 3": ["Squat","Leg Extensions","Leg Curls","Calf Raises","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
+    "Day 4": ["Shoulder Press","Lateral Raises","Front Raises","Shrugs","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
+    "Day 5": ["Deadlift","Romanian Deadlift","Hamstring Curls","Calf Raises","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
+    "Day 6": ["Chest Dips","Push-ups","Tricep Dips","Cable Flies","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
+    "Day 7": ["Abs Crunches","Plank","Leg Raises","Russian Twists","Mountain Climber Twists","Flutter Kicks"]
 }
 
-abs_exercises = [
-    "Leg Drops","Reverse Leg Crunches","Sit-Up Twists",
-    "Russian Twists","Mountain Climber Twists",
-    "Flutter Kicks","Abs Crunches","Plank","Leg Raises"
-]
+abs_exercises = ["Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks","Abs Crunches","Plank","Leg Raises"]
 
 # ---------------- DATA ENGINE ----------------
 def load_data():
@@ -60,12 +44,8 @@ def on_weight_change(week, day, date_val, exercise, set_num, total_sets, key):
     new_weight = st.session_state[key]
     df = load_data()
     df = df[~((df["Week"] == week) & (df["Day"] == day) & (df["Exercise"] == exercise) & (df["Set"] == set_num))]
-    new_row = pd.DataFrame({"Week": [week], "Day": [day], "Date": [date_val], "Exercise": [exercise], "Set": [set_num], "Weight": [float(new_weight)], "Duration": [0]})
+    new_row = pd.DataFrame([{"Week": week, "Day": day, "Date": date_val, "Exercise": exercise, "Set": set_num, "Weight": float(new_weight), "Duration": 0}])
     df = pd.concat([df, new_row], ignore_index=True)
-    for next_s in range(set_num + 1, total_sets + 1):
-        next_key = f"input_{week}_{day}_{exercise}_{next_s}"
-        if next_key in st.session_state:
-            st.session_state[next_key] = new_weight
     save_data(df)
 
 # ---------------- APP UI ----------------
@@ -85,47 +65,72 @@ c_w, c_d = st.columns(2)
 with c_w: week = st.selectbox("Week", [1, 2, 3, 4])
 with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 
-# --- DATE CALCULATION ---
+# --- GLOBAL DATE CALCULATION ---
 current_day_num = int(day.split()[-1])
 saved_date_row = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "Date"]
-is_already_saved = not saved_date_row.empty
 
-if is_already_saved:
+if not saved_date_row.empty:
     calculated_date = saved_date_row.iloc[0]
 else:
-    week_data = log_df[log_df["Week"] == week].copy()
-    if not week_data.empty:
-        week_data["DayNum"] = week_data["Day"].str.extract('(\d+)').astype(int)
-        prev_days = week_data[week_data["DayNum"] < current_day_num].sort_values("DayNum", ascending=False)
-        anchor = prev_days.iloc[0] if not prev_days.empty else week_data.sort_values("DayNum").iloc[0]
-        calculated_date = anchor["Date"] + timedelta(days=int(current_day_num - anchor["DayNum"]))
+    # Anchor to the absolute closest previous entry in the entire log
+    if not log_df.empty:
+        # Create a absolute position for comparison (Week 1 Day 1 = 1, Week 2 Day 1 = 8)
+        log_copy = log_df.copy()
+        log_copy["DayNum"] = log_copy["Day"].str.extract('(\d+)').astype(int)
+        log_copy["AbsPos"] = ((log_copy["Week"] - 1) * 7) + log_copy["DayNum"]
+        
+        current_abs_pos = ((week - 1) * 7) + current_day_num
+        
+        # Find the nearest anchor regardless of week
+        log_copy = log_copy.sort_values("AbsPos", ascending=False)
+        prev_anchors = log_copy[log_copy["AbsPos"] < current_abs_pos]
+        
+        if not prev_anchors.empty:
+            anchor = prev_anchors.iloc[0]
+            calculated_date = anchor["Date"] + timedelta(days=int(current_abs_pos - anchor["AbsPos"]))
+        else:
+            calculated_date = date.today()
     else:
         calculated_date = date.today()
 
 day_date = st.date_input("Workout Date", value=calculated_date, key=f"date_picker_{week}_{day}", disabled=not can_edit)
 
-if st.button("💾 Lock & Sync Week", disabled=not can_edit):
-    # DEEP FORWARD SYNC
-    for d_num in range(current_day_num, 8):
-        d_name = f"Day {d_num}"
-        new_d = day_date + timedelta(days=(d_num - current_day_num))
-        
-        # Update existing records (Exercises/Abs) for those days
-        log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == d_name), "Date"] = new_d
-        
-        # Ensure a Marker exists for these days
-        marker_exists = not log_df[(log_df["Week"] == week) & (log_df["Day"] == d_name) & (log_df["Exercise"] == "DAY MARKER")].empty
-        if not marker_exists:
-            marker = pd.DataFrame([{"Week": week, "Day": d_name, "Date": new_d, "Exercise": "DAY MARKER", "Set": 0, "Weight": 0.0, "Duration": 0}])
-            log_df = pd.concat([log_df, marker], ignore_index=True)
+if st.button("💾 Lock & Sync ALL Future", disabled=not can_edit):
+    current_abs_pos = ((week - 1) * 7) + current_day_num
+    
+    # 1. Prepare to update the entire log
+    updated_rows = 0
+    
+    # Iterate through all possible future slots (Up to Week 4, Day 7)
+    for w_idx in range(1, 5):
+        for d_idx in range(1, 8):
+            this_abs_pos = ((w_idx - 1) * 7) + d_idx
+            
+            # Only sync days that are the current day or in the future
+            if this_abs_pos >= current_abs_pos:
+                d_name = f"Day {d_idx}"
+                new_d = day_date + timedelta(days=int(this_abs_pos - current_abs_pos))
+                
+                # Update existing records for this specific week/day
+                mask = (log_df["Week"] == w_idx) & (log_df["Day"] == d_name)
+                if mask.any():
+                    log_df.loc[mask, "Date"] = new_d
+                
+                # Ensure a Day Marker exists so the date "sticks" for future empty days
+                marker_mask = mask & (log_df["Exercise"] == "DAY MARKER")
+                if not marker_mask.any():
+                    marker = pd.DataFrame([{"Week": w_idx, "Day": d_name, "Date": new_d, "Exercise": "DAY MARKER", "Set": 0, "Weight": 0.0, "Duration": 0}])
+                    log_df = pd.concat([log_df, marker], ignore_index=True)
+                
+                updated_rows += 1
 
     save_data(log_df)
-    st.toast("Entire week rescheduled!", icon="📅")
+    st.toast(f"Success! Sync completed for {updated_rows} day slots.", icon="🚀")
     st.rerun()
 
 st.divider()
 
-# ---------------- EXERCISES ----------------
+# ---------------- EXERCISES & ABS (Standard Logic) ----------------
 st.subheader(f"Exercises: {day}")
 for ex in workout_plan[day]:
     if ex in abs_exercises: continue
@@ -135,16 +140,11 @@ for ex in workout_plan[day]:
         for s in range(1, sets_count + 1):
             key = f"input_{week}_{day}_{ex}_{s}"
             saved = log_df[(log_df["Week"]==week) & (log_df["Day"]==day) & (log_df["Exercise"]==ex) & (log_df["Set"]==s)]
-            
             val = float(saved["Weight"].iloc[0]) if not saved.empty else (st.session_state[key] if key in st.session_state else last_val)
-            label = "✅" if not saved.empty else ""
-            
-            idx = max(0, min(int(val / 2.5) - 1, 59))
-            st.selectbox(f"Set {s} (lb) {label}", [i*2.5 for i in range(1, 61)], index=idx, key=key, 
+            st.selectbox(f"Set {s} (lb) {'✅' if not saved.empty else ''}", [i*2.5 for i in range(1, 61)], index=max(0, min(int(val / 2.5) - 1, 59)), key=key, 
                          disabled=not can_edit, on_change=on_weight_change, args=(week, day, day_date, ex, s, sets_count, key))
             last_val = st.session_state[key]
 
-# ---------------- ABS SECTION ----------------
 if any(ex in abs_exercises for ex in workout_plan[day]):
     with st.expander("💪 Abs Section"):
         for set_num in [1, 2]:
@@ -154,19 +154,12 @@ if any(ex in abs_exercises for ex in workout_plan[day]):
                 is_done = not log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] == set_num)].empty
                 dur_key = f"abs_{week}_{day}_{ex}_{set_num}"
                 c1, c2 = st.columns([4, 1.2]) 
-                with c1:
-                    st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), index=6, key=dur_key, disabled=not can_edit, label_visibility="collapsed")
+                with c1: st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), index=6, key=dur_key, disabled=not can_edit, label_visibility="collapsed")
                 with c2:
                     if st.button("✅" if is_done else "Save", key=f"btn_abs_{dur_key}", disabled=not can_edit, use_container_width=True):
                         df_abs = load_data()
                         df_abs = df_abs[~((df_abs["Week"]==week) & (df_abs["Day"]==day) & (df_abs["Exercise"]==ex) & (df_abs["Set"]==set_num))]
                         new_abs = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Duration":st.session_state[dur_key]}])
                         save_data(pd.concat([df_abs, new_abs], ignore_index=True))
+                        st.toast(f"Saved {ex}!")
                         st.rerun()
-
-# ---------------- SUMMARY ----------------
-st.divider()
-st.subheader("📊 Summary")
-summary_view = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] != "DAY MARKER")]
-if not summary_view.empty:
-    st.dataframe(summary_view.sort_values(by=["Exercise", "Set"])[["Exercise", "Set", "Weight", "Duration"]], use_container_width=True, hide_index=True)
