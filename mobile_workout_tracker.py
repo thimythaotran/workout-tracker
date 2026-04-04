@@ -107,7 +107,7 @@ if any(ex in workout_plan[day] for ex in abs_exercises):
             for ex in workout_plan[day]:
                 if ex in abs_exercises:
                     duration = st.selectbox(
-                        f"{ex} duration (seconds)",
+                        f"{ex} (seconds)",
                         list(range(1, 61)),
                         index=29,  # default 30 seconds
                         key=f"{week}_{day}_{ex}_set{set_num}_duration"
