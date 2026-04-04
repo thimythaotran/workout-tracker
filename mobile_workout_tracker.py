@@ -108,56 +108,64 @@ for ex in workout_plan[day]:
     with st.expander(ex):
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
         
-        # Track previous weight for cascading down the list
+        # Determine the cascading logic
         last_weight_seen = None
 
         for s in range(1, sets_count + 1):
             key = f"input_{week}_{day}_{ex}_{s}"
             
-            # Check if this specific set is already in the CSV
+            # 1. Priority: Check if saved in CSV
             prev_in_log = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & 
                                  (log_df["Exercise"] == ex) & (log_df["Set"] == s)]
             
-            # DECIDE WHICH WEIGHT TO SHOW
             if not prev_in_log.empty:
-                # 1. Use saved value if it exists
                 current_val = float(prev_in_log["Weight"].iloc[0])
+            elif key in st.session_state:
+                # 2. Priority: Manual change on screen
+                current_val = st.session_state[key]
             elif last_weight_seen is not None:
-                # 2. Use the weight from the set above it
+                # 3. Priority: Cascade from previous set
                 current_val = last_weight_seen
             else:
-                # 3. Default fallback
-                current_val = 10.0
+                # 4. Default starting point
+                current_val = 5.0
 
-            # Calculate dropdown index (2.5 increments)
+            # Selectbox Index Calculation (2.5lb increments)
             val_idx = int(current_val / 2.5) - 1
             val_idx = max(0, min(val_idx, 59))
 
             weight = st.selectbox(
-                f"Set {s} weight (kg)", 
+                f"Set {s} weight (lb)", 
                 [i*2.5 for i in range(1, 61)], 
                 index=val_idx, 
                 key=key, 
                 disabled=not can_edit
             )
             
-            # Update the tracker so the NEXT set in this loop knows what this set was
+            # Pass this weight down to the next set in the loop
             last_weight_seen = weight
 
             if st.button(f"Save Set {s}", key=f"btn_{key}", disabled=not can_edit):
-                # Remove existing row for this set to avoid duplicates
+                # Before saving, force all subsequent unsaved sets to this weight in session state
+                for next_s in range(s + 1, sets_count + 1):
+                    next_key = f"input_{week}_{day}_{ex}_{next_s}"
+                    # Only cascade if the next set isn't already saved in CSV
+                    next_exists = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & 
+                                        (log_df["Exercise"] == ex) & (log_df["Set"] == next_s)]
+                    if next_exists.empty:
+                        st.session_state[next_key] = weight
+
+                # Update the log
                 log_df = log_df[~((log_df["Week"] == week) & (log_df["Day"] == day) & 
                                   (log_df["Exercise"] == ex) & (log_df["Set"] == s))]
                 
-                # Create and add new row
                 new_row = pd.DataFrame({
                     "Week": [week], "Day": [day], "Date": [day_date],
                     "Exercise": [ex], "Set": [s], "Weight": [weight], "Duration": [0]
                 })
                 log_df = pd.concat([log_df, new_row], ignore_index=True)
                 log_df.to_csv(DATA_FILE, index=False)
-                st.toast(f"Saved {ex} Set {s}")
-                # Rerun ensures the cascading logic picks up the new saved value for lower sets
+                st.toast(f"Saved {ex} Set {s} at {weight} lb")
                 st.rerun()
 
 # ---------------- ABS SECTION ----------------
@@ -190,8 +198,8 @@ st.divider()
 st.subheader("📊 Today's Progress")
 current_view = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] != "DAY MARKER")]
 if not current_view.empty:
-    # Sort by Exercise and Set for a cleaner look
     current_view = current_view.sort_values(by=["Exercise", "Set"])
-    st.dataframe(current_view[["Exercise", "Set", "Weight", "Duration"]], use_container_width=True, hide_index=True)
-else:
-    st.info("No exercises logged for this session yet.")
+    st.dataframe(current_view[["Exercise", "Set", "Weight", "Duration"]], 
+                 use_container_width=True, 
+                 hide_index=True,
+                 column_config={"Weight": st.column_config.NumberColumn(format="%.1f lb")})
