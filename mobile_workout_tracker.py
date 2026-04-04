@@ -99,7 +99,7 @@ for ex in workout_plan[day]:
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
 
-                # Only pre-set session_state if key not exists (avoids resetting user choice)
+                # Only set initial weight if key does not exist
                 if weight_key not in st.session_state:
                     st.session_state[weight_key] = st.session_state[f"{week}_{day}_{ex}_last_weight"]
 
@@ -111,11 +111,12 @@ for ex in workout_plan[day]:
                     disabled=not can_edit
                 )
 
-                # Update last_weight for next set only if current set still at default
-                if st.session_state[weight_key] == st.session_state[f"{week}_{day}_{ex}_last_weight"]:
+                # Update last_weight only if the user didn't manually change previous set
+                if s > 1 and st.session_state[f"{week}_{day}_{ex}_{s}_weight"] == st.session_state[f"{week}_{day}_{ex}_{s-1}_weight"]:
                     st.session_state[f"{week}_{day}_{ex}_last_weight"] = weight
 
                 if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}", disabled=not can_edit):
+                    # Append only this set
                     log_df = pd.concat([log_df, pd.DataFrame({
                         "Week": [week],
                         "Day": [day],
