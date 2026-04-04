@@ -5,54 +5,38 @@ from datetime import date
 
 # --- SETTINGS ---
 DATA_FILE = "workout_log.csv"
-EDIT_PASSWORD = "1234"  # set your password here
+EDIT_PASSWORD = "1234"
 
 # --- WORKOUT PLAN ---
 workout_plan = {
-    "Day 1": [
-        "Flat Bench Press", "Incline Bench Press", "Cable Flies",
-        "Cable Tricep Extensions", "Skull Crushers", "Dips", "Push Ups",
-        "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
-        "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"
-    ],
-    "Day 2": [
-        "Straight Bar Deadlift", "Seated Rows", "Lat Pull Downs",
-        "One Arm Dumbbell Rows", "DB Bicep Curl", "Hammer Curls",
-        "Concentration Curls", "Leg Drops", "Reverse Leg Crunches",
-        "Sit-Up Twists", "Russian Twists", "Mountain Climber Twists",
-        "Flutter Kicks"
-    ],
-    "Day 3": [
-        "Squat", "Leg Extensions", "Leg Curls", "Calf Raises",
-        "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
-        "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"
-    ],
-    "Day 4": [
-        "Shoulder Press", "Lateral Raises", "Front Raises", "Shrugs",
-        "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
-        "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"
-    ],
-    "Day 5": [
-        "Deadlift", "Romanian Deadlift", "Hamstring Curls", "Calf Raises",
-        "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
-        "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"
-    ],
-    "Day 6": [
-        "Chest Dips", "Push-ups", "Tricep Dips", "Cable Flies",
-        "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
-        "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"
-    ],
-    "Day 7": [
-        "Abs Crunches", "Plank", "Leg Raises", "Russian Twists",
-        "Mountain Climber Twists", "Flutter Kicks"
-    ]
+    "Day 1": ["Flat Bench Press", "Incline Bench Press", "Cable Flies",
+              "Cable Tricep Extensions", "Skull Crushers", "Dips", "Push Ups",
+              "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+              "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"],
+    "Day 2": ["Straight Bar Deadlift", "Seated Rows", "Lat Pull Downs",
+              "One Arm Dumbbell Rows", "DB Bicep Curl", "Hammer Curls",
+              "Concentration Curls", "Leg Drops", "Reverse Leg Crunches",
+              "Sit-Up Twists", "Russian Twists", "Mountain Climber Twists",
+              "Flutter Kicks"],
+    "Day 3": ["Squat", "Leg Extensions", "Leg Curls", "Calf Raises",
+              "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+              "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"],
+    "Day 4": ["Shoulder Press", "Lateral Raises", "Front Raises", "Shrugs",
+              "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+              "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"],
+    "Day 5": ["Deadlift", "Romanian Deadlift", "Hamstring Curls", "Calf Raises",
+              "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+              "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"],
+    "Day 6": ["Chest Dips", "Push-ups", "Tricep Dips", "Cable Flies",
+              "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+              "Russian Twists", "Mountain Climber Twists", "Flutter Kicks"],
+    "Day 7": ["Abs Crunches", "Plank", "Leg Raises", "Russian Twists",
+              "Mountain Climber Twists", "Flutter Kicks"]
 }
 
-abs_exercises = [
-    "Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
-    "Russian Twists", "Mountain Climber Twists", "Flutter Kicks",
-    "Abs Crunches", "Plank", "Leg Raises"
-]
+abs_exercises = ["Leg Drops", "Reverse Leg Crunches", "Sit-Up Twists",
+                 "Russian Twists", "Mountain Climber Twists", "Flutter Kicks",
+                 "Abs Crunches", "Plank", "Leg Raises"]
 
 # --- LOAD LOG ---
 if os.path.exists(DATA_FILE):
@@ -62,7 +46,7 @@ if os.path.exists(DATA_FILE):
 else:
     log_df = pd.DataFrame(columns=["Week", "Day", "Date", "Exercise", "Set", "Weight", "Duration", "Completed"])
 
-# --- Preload previous weights/duration/completed into session_state ---
+# --- Preload saved values into session_state ---
 for idx, row in log_df.iterrows():
     key_w = f"{row['Week']}_{row['Day']}_{row['Exercise']}_{row['Set']}_weight"
     st.session_state[key_w] = row['Weight']
@@ -76,17 +60,17 @@ for idx, row in log_df.iterrows():
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
 st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
 
-# --- PASSWORD PROTECTION ---
+# --- PASSWORD ---
 user_password = st.text_input("Enter password to edit:", type="password")
 can_edit = user_password == EDIT_PASSWORD
 if not can_edit:
-    st.info("🔒 You are in view-only mode. Enter the password to enable editing.")
+    st.info("🔒 View-only mode. Enter password to edit.")
 
 # --- SELECT WEEK & DAY ---
 week = st.selectbox("Select Week", [1, 2, 3, 4])
 day = st.selectbox("Select Day", list(workout_plan.keys()))
 
-# --- AUTO-FILL DATE ---
+# --- DATE ---
 existing_dates = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]["Date"]
 default_date = existing_dates.max().date() if not existing_dates.empty else date.today()
 day_date = st.date_input("Date for this Day", value=default_date, key=f"{week}_{day}_date", disabled=not can_edit)
@@ -97,15 +81,13 @@ for ex in workout_plan[day]:
     if ex not in abs_exercises:
         with st.expander(ex):
             sets = st.number_input(
-                f"Number of sets for {ex}",
-                min_value=1, max_value=10, value=4,
-                key=f"{week}_{day}_{ex}_sets",
-                disabled=not can_edit
+                f"Number of sets for {ex}", min_value=1, max_value=10, value=4,
+                key=f"{week}_{day}_{ex}_sets", disabled=not can_edit
             )
 
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
-                default_weight = st.session_state.get(weight_key, 5.0)  # always default 5 if empty
+                default_weight = st.session_state.get(weight_key, 5.0)  # just 5 if new
 
                 weight = st.selectbox(
                     f"Set {s} weight (lbs)",
@@ -114,10 +96,6 @@ for ex in workout_plan[day]:
                     key=weight_key,
                     disabled=not can_edit
                 )
-
-                # --- Removed cascading logic here ---
-                # if weight != st.session_state[f"{week}_{day}_{ex}_last_weight"]:
-                #     st.session_state[f"{week}_{day}_{ex}_last_weight"] = weight
 
                 if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}", disabled=not can_edit):
                     log_df = pd.concat([log_df, pd.DataFrame({
@@ -133,7 +111,7 @@ for ex in workout_plan[day]:
                     log_df.to_csv(DATA_FILE, index=False)
                     st.success(f"Saved {ex} Set {s} ({weight} lbs)")
 
-# --- ABS EXERCISES GROUPED ---
+# --- ABS EXERCISES ---
 if any(ex in workout_plan[day] for ex in abs_exercises):
     with st.expander("💪 Abs Exercises"):
         for set_num in range(1, 3):
