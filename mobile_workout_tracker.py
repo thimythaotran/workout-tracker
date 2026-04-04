@@ -1,5 +1,5 @@
-# VERSION: 2026-04-04 07:30 PM
-# STATUS: Phase 2 - Absolute Row Independence + Copy Set 1 + Mobile Optimized
+# VERSION: 2026-04-04 07:45 PM
+# STATUS: Phase 2 - Absolute Row Independence + Unique ID Mapping
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- DATA ENGINE ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-GEN_TIMESTAMP = "2026-04-04 07:30 PM" 
+GEN_TIMESTAMP = "2026-04-04 07:45 PM" 
 
 def load_data():
     if not os.path.exists(DATA_FILE):
@@ -94,6 +94,7 @@ def show_timer(key_suffix):
             st.session_state["timer_running"] = True
             st.rerun()
 
+# Filter data once for the current view
 today_data = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
 gym_ex = [e for e in workout_plan[day] if e not in ABS_MASTER_LIST]
 abs_ex = [e for e in workout_plan[day] if e in ABS_MASTER_LIST]
@@ -126,10 +127,10 @@ for ex in gym_ex:
         for s in range(1, sets_count + 1):
             w_key, r_key = f"w_{week}_{day}_{ex}_{s}", f"r_{week}_{day}_{ex}_{s}"
             
-            # Fetch CURRENT DB STATE for this exact row
+            # 1. Fetch CURRENT DB STATE for this EXACT row (including set number)
             row_match = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
             
-            # Use Session State to keep UI responsive
+            # 2. Setup Initial Values in Session State if not existing
             if w_key not in st.session_state:
                 st.session_state[w_key] = float(row_match["Weight"].iloc[0]) if not row_match.empty else 5.0
             if r_key not in st.session_state:
@@ -138,16 +139,13 @@ for ex in gym_ex:
             c1, c2, c3, c4 = st.columns([0.7, 1.5, 1.5, 0.8])
             with c1: st.write(f"**{s}**")
             with c2: 
-                st.selectbox("W", [i*2.5 for i in range(1, 61)], 
-                             key=w_key, disabled=not can_edit, label_visibility="collapsed")
+                st.selectbox("W", [i*2.5 for i in range(1, 61)], key=w_key, disabled=not can_edit, label_visibility="collapsed")
             with c3: 
-                st.selectbox("R", list(range(0, 21)), 
-                             key=r_key, disabled=not can_edit, label_visibility="collapsed")
+                st.selectbox("R", list(range(0, 21)), key=r_key, disabled=not can_edit, label_visibility="collapsed")
             with c4:
-                # TRIPLE-CHECK INDEPENDENCE:
-                # 1. Does a match exist in DB?
-                # 2. Does weight match that SPECIFIC row?
-                # 3. Does reps match that SPECIFIC row?
+                # 3. INDEPENDENT SYNC CHECK:
+                # Row must NOT be empty AND values must match. 
+                # Because we filter today_data by 's' (set number), row_match is unique to THIS row.
                 is_synced = False
                 if not row_match.empty:
                     db_w = float(row_match["Weight"].iloc[0])
