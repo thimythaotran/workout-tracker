@@ -49,9 +49,8 @@ else:
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
 st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
 
-# --- LAST UPDATE TIMESTAMP ---
-from datetime import datetime
-st.markdown(f"🕒 **Last Update:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+# --- VERSION TIMESTAMP ---
+st.markdown("🕒 **Version Timestamp:** 2026-04-03 18:00:00")
 
 # --- PASSWORD ---
 user_password = st.text_input("Enter password to edit:", type="password")
@@ -81,7 +80,6 @@ for ex in workout_plan[day]:
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
                 
-                # Initialize default weight only if key does not exist yet
                 if weight_key not in st.session_state:
                     prev_weight = log_df.loc[
                         (log_df["Week"]==week) & (log_df["Day"]==day) &
@@ -112,7 +110,7 @@ for ex in workout_plan[day]:
                     })], ignore_index=True)
                     log_df.to_csv(DATA_FILE, index=False)
                     st.success(f"Saved {ex} Set {s} ({weight} lbs)")
-                    
+
 # --- ABS EXERCISES GROUPED ---
 if any(ex in workout_plan[day] for ex in abs_exercises):
     with st.expander("💪 Abs Exercises"):
