@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+from datetime import date
 
 # --- SETTINGS ---
 DATA_FILE = "workout_log.csv"
@@ -18,19 +19,29 @@ workout_plan = {
 
 # --- LOAD LOG ---
 if os.path.exists(DATA_FILE):
-    log_df = pd.read_csv(DATA_FILE)
+    log_df = pd.read_csv(DATA_FILE, parse_dates=["Date"])
 else:
-    log_df = pd.DataFrame(columns=["Week", "Day", "Exercise", "Set", "Weight"])
+    log_df = pd.DataFrame(columns=["Week", "Day", "Date", "Exercise", "Set", "Weight"])
 
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
-st.title("🏋️‍♂️ Mobile Workout Tracker")
+st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")  # smaller title
 
 # --- SELECT WEEK & DAY ---
 week = st.selectbox("Select Week", [1, 2, 3, 4])
 day = st.selectbox("Select Day", list(workout_plan.keys()))
 
+# --- AUTO-FILL DATE ---
+# Check if we already have a date for this week/day
+existing_dates = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]["Date"]
+if not existing_dates.empty:
+    default_date = existing_dates.max().date()
+else:
+    default_date = date.today()
+
+day_date = st.date_input("Date for this Day", value=default_date, key=f"{week}_{day}_date")
+
 # --- SHOW EXERCISES ---
-st.subheader(f"Week {week} - {day}")
+st.subheader(f"Week {week} - {day} ({day_date})")
 for ex in workout_plan[day]:
     with st.expander(ex):
         sets = st.number_input(f"Number of sets for {ex}", min_value=1, max_value=10, value=4, key=f"{week}_{day}_{ex}_sets")
@@ -41,6 +52,7 @@ for ex in workout_plan[day]:
                 log_df = pd.concat([log_df, pd.DataFrame({
                     "Week": [week],
                     "Day": [day],
+                    "Date": [day_date],
                     "Exercise": [ex],
                     "Set": [s],
                     "Weight": [weight]
