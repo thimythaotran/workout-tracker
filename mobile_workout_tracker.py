@@ -108,3 +108,60 @@ for ex in workout_plan[day]:
                     })], ignore_index=True)
                     log_df.to_csv(DATA_FILE, index=False)
                     st.success(f"Saved {ex} Set {s} ({weight} lbs)")
+                    
+# --- ABS EXERCISES GROUPED ---
+if any(ex in workout_plan[day] for ex in abs_exercises):
+    with st.expander("💪 Abs Exercises"):
+        for set_num in range(1, 3):
+            st.markdown(f"### Set {set_num}")
+            for ex in workout_plan[day]:
+                if ex in abs_exercises:
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        duration_key = f"{week}_{day}_{ex}_set{set_num}_duration"
+                        duration = st.selectbox(
+                            f"{ex} (seconds)",
+                            list(range(1, 61)),
+                            index=st.session_state.get(duration_key, 30)-1,
+                            key=duration_key,
+                            disabled=not can_edit
+                        )
+                    with col2:
+                        completed_key = f"{week}_{day}_{ex}_set{set_num}_completed"
+                        completed = st.checkbox(
+                            "Done",
+                            value=st.session_state.get(completed_key, False),
+                            key=completed_key,
+                            disabled=not can_edit
+                        )
+
+                    if completed and can_edit:
+                        log_df = pd.concat([log_df, pd.DataFrame({
+                            "Week": [week],
+                            "Day": [day],
+                            "Date": [day_date],
+                            "Exercise": [ex],
+                            "Set": [set_num],
+                            "Weight": [0],
+                            "Duration": [duration],
+                            "Completed": [True]
+                        })], ignore_index=True)
+                        log_df.to_csv(DATA_FILE, index=False)
+                        st.success(f"Saved {ex} Set {set_num} ({duration}s)")
+
+# --- VIEW LOG ---
+st.subheader("📊 Your Progress")
+week_day_log = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
+st.dataframe(week_day_log)
+
+# --- WEEKLY COMPARISON ---
+st.subheader("📈 Previous Weeks Comparison")
+compare_ex = st.selectbox("Select Exercise to Compare", workout_plan[day])
+compare_df = log_df[(log_df["Day"] == day) & (log_df["Exercise"] == compare_ex)]
+
+if not compare_df.empty:
+    comparison = compare_df.groupby("Week")["Weight"].mean().reset_index()
+    comparison = comparison.sort_values("Week")
+    st.line_chart(comparison.rename(columns={"Week": "Week", "Weight": "Avg Weight"}).set_index("Week"))
+else:
+    st.info("No data yet for this exercise across weeks.")
