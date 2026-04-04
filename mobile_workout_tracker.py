@@ -108,27 +108,28 @@ for ex in workout_plan[day]:
     with st.expander(ex):
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
         
-        # Track the weight from the previous set for cascading
+        # Track previous weight for cascading down the list
         last_weight_seen = None
 
         for s in range(1, sets_count + 1):
             key = f"input_{week}_{day}_{ex}_{s}"
             
-            # Find if there is a saved value in the CSV
+            # Check if this specific set is already in the CSV
             prev_in_log = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & 
                                  (log_df["Exercise"] == ex) & (log_df["Set"] == s)]
             
-            # Determine the starting weight for the selectbox
+            # DECIDE WHICH WEIGHT TO SHOW
             if not prev_in_log.empty:
+                # 1. Use saved value if it exists
                 current_val = float(prev_in_log["Weight"].iloc[0])
-            elif key in st.session_state:
-                current_val = st.session_state[key]
             elif last_weight_seen is not None:
+                # 2. Use the weight from the set above it
                 current_val = last_weight_seen
             else:
-                current_val = 10.0 # Standard fallback
+                # 3. Default fallback
+                current_val = 10.0
 
-            # Calculate dropdown index
+            # Calculate dropdown index (2.5 increments)
             val_idx = int(current_val / 2.5) - 1
             val_idx = max(0, min(val_idx, 59))
 
@@ -140,12 +141,15 @@ for ex in workout_plan[day]:
                 disabled=not can_edit
             )
             
-            # Update cascading variable for the next set
+            # Update the tracker so the NEXT set in this loop knows what this set was
             last_weight_seen = weight
 
             if st.button(f"Save Set {s}", key=f"btn_{key}", disabled=not can_edit):
+                # Remove existing row for this set to avoid duplicates
                 log_df = log_df[~((log_df["Week"] == week) & (log_df["Day"] == day) & 
                                   (log_df["Exercise"] == ex) & (log_df["Set"] == s))]
+                
+                # Create and add new row
                 new_row = pd.DataFrame({
                     "Week": [week], "Day": [day], "Date": [day_date],
                     "Exercise": [ex], "Set": [s], "Weight": [weight], "Duration": [0]
@@ -153,6 +157,8 @@ for ex in workout_plan[day]:
                 log_df = pd.concat([log_df, new_row], ignore_index=True)
                 log_df.to_csv(DATA_FILE, index=False)
                 st.toast(f"Saved {ex} Set {s}")
+                # Rerun ensures the cascading logic picks up the new saved value for lower sets
+                st.rerun()
 
 # ---------------- ABS SECTION ----------------
 if any(ex in abs_exercises for ex in workout_plan[day]):
@@ -177,10 +183,15 @@ if any(ex in abs_exercises for ex in workout_plan[day]):
                         log_df = pd.concat([log_df, new_abs], ignore_index=True)
                         log_df.to_csv(DATA_FILE, index=False)
                         st.success(f"Saved {ex}")
+                        st.rerun()
 
 # ---------------- SUMMARY ----------------
 st.divider()
 st.subheader("📊 Today's Progress")
 current_view = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] != "DAY MARKER")]
 if not current_view.empty:
-    st.dataframe(current_view[["Exercise", "Set", "Weight", "Duration"]].sort_values(by=["Exercise", "Set"]), use_container_width=True)
+    # Sort by Exercise and Set for a cleaner look
+    current_view = current_view.sort_values(by=["Exercise", "Set"])
+    st.dataframe(current_view[["Exercise", "Set", "Weight", "Duration"]], use_container_width=True, hide_index=True)
+else:
+    st.info("No exercises logged for this session yet.")
