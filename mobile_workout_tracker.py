@@ -1,5 +1,5 @@
-# VERSION: 2026-04-04 05:55 PM
-# STATUS: Phase 2 - Ultra-Compact Mobile Rows + Manual Save + Big Timers
+# VERSION: 2026-04-04 06:10 PM
+# STATUS: Phase 2 - Reactive Save Buttons + Mobile Optimized + Manual Save
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-GEN_TIMESTAMP = "2026-04-04 05:55 PM" 
+GEN_TIMESTAMP = "2026-04-04 06:10 PM" 
 
 # ---------------- WORKOUT PLAN ----------------
 workout_plan = {
@@ -109,7 +109,6 @@ for ex in gym_ex:
         st.divider()
         sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
         
-        # Super tight ratios for mobile
         h1, h2, h3, h4 = st.columns([0.7, 1.5, 1.5, 0.8])
         h1.caption("Set")
         h2.caption("Weight")
@@ -119,23 +118,33 @@ for ex in gym_ex:
         for s in range(1, sets_count + 1):
             w_key = f"w_{week}_{day}_{ex}_{s}"
             r_key = f"r_{week}_{day}_{ex}_{s}"
-            saved = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
             
-            curr_w = float(saved["Weight"].iloc[0]) if not saved.empty else 5.0
-            curr_r = int(saved["Reps"].iloc[0]) if not saved.empty else 8
+            # Get existing data for this specific set
+            row_match = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == s)]
+            
+            # Determine initial values for selectboxes
+            db_w = float(row_match["Weight"].iloc[0]) if not row_match.empty else 5.0
+            db_r = int(row_match["Reps"].iloc[0]) if not row_match.empty else 8
             
             c1, c2, c3, c4 = st.columns([0.7, 1.5, 1.5, 0.8])
             with c1:
                 st.write(f"**{s}**")
             with c2:
-                st.selectbox("W", [i*2.5 for i in range(1, 61)], index=max(0, min(int(curr_w / 2.5) - 1, 59)), 
-                             key=w_key, disabled=not can_edit, label_visibility="collapsed")
+                # Use db value if key not in session state yet
+                w_val = st.selectbox("W", [i*2.5 for i in range(1, 61)], index=max(0, min(int(db_w / 2.5) - 1, 59)), 
+                                     key=w_key, disabled=not can_edit, label_visibility="collapsed")
             with c3:
-                st.selectbox("R", list(range(0, 21)), index=curr_r, 
-                             key=r_key, disabled=not can_edit, label_visibility="collapsed")
+                r_val = st.selectbox("R", list(range(0, 21)), index=db_r, 
+                                     key=r_key, disabled=not can_edit, label_visibility="collapsed")
             with c4:
-                is_done = not saved.empty
-                if st.button("✅" if is_done else "💾", key=f"btn_{w_key}", disabled=not can_edit):
+                # REACTIVE LOGIC: Show Check only if session state values match the DB exactly
+                is_synced = (not row_match.empty and 
+                             float(st.session_state[w_key]) == db_w and 
+                             int(st.session_state[r_key]) == db_r)
+                
+                btn_icon = "✅" if is_synced else "💾"
+                
+                if st.button(btn_icon, key=f"btn_{w_key}", disabled=not can_edit):
                     df_s = load_data()
                     df_s = df_s[~((df_s["Week"]==week) & (df_s["Day"]==day) & (df_s["Exercise"]==ex) & (df_s["Set"]==s))]
                     new_r = pd.DataFrame([{
@@ -154,14 +163,18 @@ if abs_ex:
         for set_num in [1, 2]:
             st.caption(f"SET {set_num}")
             for ex in abs_ex:
-                saved_abs = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == set_num)]
-                is_done = not saved_abs.empty
                 dur_key = f"abs_{week}_{day}_{ex}_{set_num}"
+                row_abs = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == set_num)]
+                db_dur = int(row_abs["Duration"].iloc[0]) if not row_abs.empty else 30
+                
                 c1, c2 = st.columns([4, 1]) 
                 with c1:
-                    st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), index=6, key=dur_key, disabled=not can_edit, label_visibility="collapsed")
+                    st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), index=max(0, db_dur // 5), 
+                                 key=dur_key, disabled=not can_edit, label_visibility="collapsed")
                 with c2:
-                    if st.button("✅" if is_done else "💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
+                    # Reactive logic for Abs
+                    abs_synced = (not row_abs.empty and int(st.session_state[dur_key]) == db_dur)
+                    if st.button("✅" if abs_synced else "💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
                         df_save = load_data()
                         df_save = df_save[~((df_save["Week"]==week) & (df_save["Day"]==day) & (df_save["Exercise"]==ex) & (df_save["Set"]==set_num))]
                         new_row = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Reps":0, "Duration":st.session_state[dur_key]}])
