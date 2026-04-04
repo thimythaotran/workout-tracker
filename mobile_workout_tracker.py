@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import date
+from datetime import date, datetime
 
 # --- SETTINGS ---
 DATA_FILE = "workout_log.csv"
@@ -47,10 +47,15 @@ else:
     log_df = pd.DataFrame(columns=["Week", "Day", "Date", "Exercise", "Set", "Weight", "Duration", "Completed"])
 
 st.set_page_config(page_title="🏋️‍♂️ Workout Tracker", layout="centered")
-st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
 
 # --- VERSION TIMESTAMP ---
-st.markdown("🕒 **Version Timestamp:** 2026-04-03 18:00:00")
+if not log_df.empty:
+    last_update = log_df["Date"].max()
+else:
+    last_update = datetime.now()
+st.markdown(f"🕒 **Version Timestamp:** {pd.to_datetime(last_update).strftime('%Y-%m-%d %H:%M:%S')}")
+
+st.markdown("### 🏋️‍♂️ Mobile Workout Tracker")
 
 # --- PASSWORD ---
 user_password = st.text_input("Enter password to edit:", type="password")
@@ -62,30 +67,15 @@ if not can_edit:
 week = st.selectbox("Select Week", [1, 2, 3, 4])
 day = st.selectbox("Select Day", list(workout_plan.keys()))
 
-# --- DATE (fixed) ---
+# --- DATE ---
 existing_dates = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]["Date"]
-
-if not existing_dates.empty:
-    max_date = existing_dates.max()
-    if pd.isna(max_date):
-        default_date = date.today()
-    else:
-        default_date = pd.to_datetime(max_date).date()
-else:
-    default_date = date.today()
-
-# store per week/day in session_state to avoid losing selection
-date_key = f"{week}_{day}_date_value"
-if date_key not in st.session_state:
-    st.session_state[date_key] = default_date
-
+default_date = existing_dates.max().date() if not existing_dates.empty else date.today()
 day_date = st.date_input(
     "Date for this Day",
-    value=st.session_state[date_key],
+    value=default_date,
     key=f"{week}_{day}_date",
     disabled=not can_edit
 )
-st.session_state[date_key] = day_date  # update session_state
 
 # --- NON-ABS EXERCISES ---
 st.subheader(f"Week {week} - {day} ({day_date})")
@@ -99,7 +89,7 @@ for ex in workout_plan[day]:
 
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
-                
+
                 if weight_key not in st.session_state:
                     prev_weight = log_df.loc[
                         (log_df["Week"]==week) & (log_df["Day"]==day) &
@@ -158,6 +148,8 @@ if any(ex in workout_plan[day] for ex in abs_exercises):
                         )
 
                     if completed and can_edit:
+                        log_df = log_df[~((log_df["Week"]==week) & (log_df["Day"]==day) &
+                                          (log_df["Exercise"]==ex) & (log_df["Set"]==set_num))]
                         log_df = pd.concat([log_df, pd.DataFrame({
                             "Week": [week],
                             "Day": [day],
