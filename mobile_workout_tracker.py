@@ -98,18 +98,25 @@ for ex in workout_plan[day]:
 
             for s in range(1, sets + 1):
                 weight_key = f"{week}_{day}_{ex}_{s}_weight"
-                # Default weight logic: if weight not selected yet, use last_weight
-                default_weight = st.session_state[f"{week}_{day}_{ex}_last_weight"]
+
+                # If not already in session_state, use last weight
+                if weight_key not in st.session_state:
+                    st.session_state[weight_key] = st.session_state[f"{week}_{day}_{ex}_last_weight"]
+
+                # Show selectbox with session_state value
                 weight = st.selectbox(
                     f"Set {s} weight (lbs)",
                     [i * 2.5 for i in range(2, 41)],  # 5 to 100
-                    index=[i*2.5 for i in range(2,41)].index(default_weight),
+                    index=[i*2.5 for i in range(2,41)].index(st.session_state[weight_key]),
                     key=weight_key,
                     disabled=not can_edit
                 )
 
-                # If weight is at default, update next default
-                if weight != st.session_state[f"{week}_{day}_{ex}_last_weight"]:
+                # Update session_state for this set
+                st.session_state[weight_key] = weight
+
+                # Update last_weight for next set only if it was at previous default
+                if s < sets:  # only update for the next set
                     st.session_state[f"{week}_{day}_{ex}_last_weight"] = weight
 
                 if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}", disabled=not can_edit):
