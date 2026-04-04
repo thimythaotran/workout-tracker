@@ -6,7 +6,7 @@ from datetime import date
 # --- SETTINGS ---
 DATA_FILE = "workout_log.csv"
 
-# --- WORKOUT PLAN (Updated with full exercises) ---
+# --- WORKOUT PLAN ---
 workout_plan = {
     "Day 1": [
         "Flat Bench Press", "Incline Bench Press", "Cable Flies",
@@ -68,60 +68,67 @@ else:
     default_date = date.today()
 day_date = st.date_input("Date for this Day", value=default_date, key=f"{week}_{day}_date")
 
-# --- SHOW EXERCISES ---
 st.subheader(f"Week {week} - {day} ({day_date})")
 
-# Check if this is an abs day (Day 7 or any exercise group you define)
+# --- DEFINE ABS EXERCISES ---
 abs_exercises = [
     "Abs Crunches", "Plank", "Leg Raises", "Russian Twists",
     "Mountain Climber Twists", "Flutter Kicks"
 ]
 
+# --- ABS GROUPED SECTION ---
+if any(ex in abs_exercises for ex in workout_plan[day]):
+    with st.expander("💪 Abs Exercises"):
+        for set_num in range(1, 3):  # 2 sets for all abs
+            st.markdown(f"**Set {set_num}**")
+            for ex in workout_plan[day]:
+                if ex in abs_exercises:
+                    col1, col2 = st.columns([1, 2])
+                    with col1:
+                        done = st.checkbox(f"{ex} done", key=f"{week}_{day}_{ex}_set{set_num}_done")
+                    with col2:
+                        seconds = st.selectbox(
+                            f"Duration (sec) {ex}",
+                            list(range(1, 61)),
+                            index=29,
+                            key=f"{week}_{day}_{ex}_set{set_num}_seconds"
+                        )
+                    if st.button(f"Save {ex} Set {set_num}", key=f"save_{week}_{day}_{ex}_set{set_num}"):
+                        log_df = pd.concat([log_df, pd.DataFrame({
+                            "Week": [week],
+                            "Day": [day],
+                            "Date": [day_date],
+                            "Exercise": [ex],
+                            "Set": [set_num],
+                            "Weight": [None],
+                            "Seconds": [seconds],
+                            "Done": [done]
+                        })], ignore_index=True)
+                        log_df.to_csv(DATA_FILE, index=False)
+                        st.success(f"Saved {ex} Set {set_num} ({seconds}s, done={done})")
+
+# --- SHOW REGULAR EXERCISES ---
 for ex in workout_plan[day]:
+    if ex in abs_exercises:
+        continue  # skip abs, already handled
     with st.expander(ex):
-        if ex in abs_exercises:
-            for set_num in range(1, 3):  # 2 sets
-                col1, col2 = st.columns([1, 2])
-                with col1:
-                    done = st.checkbox(f"Set {set_num} done", key=f"{week}_{day}_{ex}_set{set_num}_done")
-                with col2:
-                    seconds = st.selectbox(
-                        f"Duration (sec) Set {set_num}",
-                        list(range(1, 61)),
-                        index=29,
-                        key=f"{week}_{day}_{ex}_set{set_num}_seconds"
-                    )
-                if st.button(f"Save {ex} Set {set_num}", key=f"save_{week}_{day}_{ex}_set{set_num}"):
-                    log_df = pd.concat([log_df, pd.DataFrame({
-                        "Week": [week],
-                        "Day": [day],
-                        "Date": [day_date],
-                        "Exercise": [ex],
-                        "Set": [set_num],
-                        "Weight": [None],
-                        "Seconds": [seconds],
-                        "Done": [done]
-                    })], ignore_index=True)
-                    log_df.to_csv(DATA_FILE, index=False)
-                    st.success(f"Saved {ex} Set {set_num} ({seconds}s, done={done})")
-        else:
-            sets = st.number_input(f"Number of sets for {ex}", min_value=1, max_value=10, value=4, key=f"{week}_{day}_{ex}_sets")
-            for s in range(1, sets + 1):
-                weight_key = f"{week}_{day}_{ex}_{s}_weight"
-                weight = st.number_input(f"Set {s} weight (lbs)", min_value=0, step=1, key=weight_key)
-                if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}"):
-                    log_df = pd.concat([log_df, pd.DataFrame({
-                        "Week": [week],
-                        "Day": [day],
-                        "Date": [day_date],
-                        "Exercise": [ex],
-                        "Set": [s],
-                        "Weight": [weight],
-                        "Seconds": [None],
-                        "Done": [None]
-                    })], ignore_index=True)
-                    log_df.to_csv(DATA_FILE, index=False)
-                    st.success(f"Saved {ex} Set {s} ({weight} lbs)")
+        sets = st.number_input(f"Number of sets for {ex}", min_value=1, max_value=10, value=4, key=f"{week}_{day}_{ex}_sets")
+        for s in range(1, sets + 1):
+            weight_key = f"{week}_{day}_{ex}_{s}_weight"
+            weight = st.number_input(f"Set {s} weight (lbs)", min_value=0, step=1, key=weight_key)
+            if st.button(f"Save {ex} Set {s}", key=f"save_{week}_{day}_{ex}_{s}"):
+                log_df = pd.concat([log_df, pd.DataFrame({
+                    "Week": [week],
+                    "Day": [day],
+                    "Date": [day_date],
+                    "Exercise": [ex],
+                    "Set": [s],
+                    "Weight": [weight],
+                    "Seconds": [None],
+                    "Done": [None]
+                })], ignore_index=True)
+                log_df.to_csv(DATA_FILE, index=False)
+                st.success(f"Saved {ex} Set {s} ({weight} lbs)")
 
 # --- VIEW LOG ---
 st.subheader("📊 Your Progress")
