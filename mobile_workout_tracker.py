@@ -47,11 +47,10 @@ def load_data():
     try:
         df = pd.read_csv(DATA_FILE)
         if not df.empty:
-            # Clean and convert dates
             df["Date"] = pd.to_datetime(df["Date"], errors='coerce').dt.date
             df = df.dropna(subset=["Date"]) 
         return df
-    except Exception as e:
+    except Exception:
         return pd.DataFrame(columns=["Week","Day","Date","Exercise","Set","Weight","Duration"])
 
 def save_data(df):
@@ -95,17 +94,15 @@ with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 
 # --- SMART DATE CASCADING ---
 current_day_num = int(day.split()[-1])
-existing_dates = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "Date"]
+saved_date_row = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "Date"]
+is_already_saved = not saved_date_row.empty
 
-if not existing_dates.empty:
-    calculated_date = existing_dates.iloc[0]
+if is_already_saved:
+    calculated_date = saved_date_row.iloc[0]
 else:
     week_data = log_df[log_df["Week"] == week].copy()
     if not week_data.empty:
-        # Regex to pull day number
         week_data["DayNum"] = week_data["Day"].str.extract('(\d+)').astype(int)
-        
-        # Sort to find the anchor
         prev_days = week_data[week_data["DayNum"] < current_day_num].sort_values("DayNum", ascending=False)
         
         if not prev_days.empty:
@@ -116,7 +113,6 @@ else:
             anchor_val = first_day["Date"]
             anchor_num = first_day["DayNum"]
         
-        # FINAL SAFETY: Force anchor_val to be a date object
         if isinstance(anchor_val, str):
             anchor_val = datetime.strptime(anchor_val, "%Y-%m-%d").date()
         
@@ -126,10 +122,14 @@ else:
 
 day_date = st.date_input("Workout Date", value=calculated_date, key=f"dt_{week}_{day}", disabled=not can_edit)
 
-if st.button("💾 Lock Date", disabled=not can_edit):
+# UI Logic for Button Label
+lock_label = "✅ Date Locked" if is_already_saved and saved_date_row.iloc[0] == day_date else "💾 Lock Date"
+
+if st.button(lock_label, disabled=not can_edit):
     marker = pd.DataFrame({"Week": [week], "Day": [day], "Date": [day_date], "Exercise": ["DAY MARKER"], "Set": [0], "Weight": [0.0], "Duration": [0]})
     new_log = pd.concat([log_df, marker], ignore_index=True).drop_duplicates(subset=["Week", "Day", "Exercise", "Set"], keep="last")
     save_data(new_log)
+    st.toast(f"Date set to {day_date} for {day}!", icon="📅")
     st.rerun()
 
 st.divider()
@@ -176,6 +176,7 @@ if any(ex in abs_exercises for ex in workout_plan[day]):
                         df_abs = df_abs[~((df_abs["Week"]==week) & (df_abs["Day"]==day) & (df_abs["Exercise"]==ex) & (df_abs["Set"]==set_num))]
                         new_abs = pd.DataFrame({"Week":[week], "Day":[day], "Date":[day_date], "Exercise":[ex], "Set":[set_num], "Weight":[0.0], "Duration":[st.session_state[dur_key]]})
                         save_data(pd.concat([df_abs, new_abs], ignore_index=True))
+                        st.toast(f"Abs: {ex} saved!", icon="💪")
                         st.rerun()
 
 # ---------------- SUMMARY ----------------
