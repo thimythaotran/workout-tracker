@@ -47,11 +47,11 @@ def load_data():
     try:
         df = pd.read_csv(DATA_FILE)
         if not df.empty:
-            # Force conversion to datetime then extract the date part
-            df["Date"] = pd.to_datetime(df["Date"]).dt.date
+            # Clean and convert dates
+            df["Date"] = pd.to_datetime(df["Date"], errors='coerce').dt.date
+            df = df.dropna(subset=["Date"]) 
         return df
     except Exception as e:
-        st.error(f"Data Load Error: {e}")
         return pd.DataFrame(columns=["Week","Day","Date","Exercise","Set","Weight","Duration"])
 
 def save_data(df):
@@ -93,7 +93,7 @@ c_w, c_d = st.columns(2)
 with c_w: week = st.selectbox("Week", [1, 2, 3, 4])
 with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 
-# --- SMART DATE CASCADING LOGIC ---
+# --- SMART DATE CASCADING ---
 current_day_num = int(day.split()[-1])
 existing_dates = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "Date"]
 
@@ -102,19 +102,25 @@ if not existing_dates.empty:
 else:
     week_data = log_df[log_df["Week"] == week].copy()
     if not week_data.empty:
-        # Helper to extract day number from string "Day X"
+        # Regex to pull day number
         week_data["DayNum"] = week_data["Day"].str.extract('(\d+)').astype(int)
         
-        # Look for closest previous day
+        # Sort to find the anchor
         prev_days = week_data[week_data["DayNum"] < current_day_num].sort_values("DayNum", ascending=False)
         
         if not prev_days.empty:
-            anchor = prev_days.iloc[0]
-            calculated_date = anchor["Date"] + timedelta(days=int(current_day_num - anchor["DayNum"]))
+            anchor_val = prev_days.iloc[0]["Date"]
+            anchor_num = prev_days.iloc[0]["DayNum"]
         else:
-            # Fallback to the first day recorded in the week (even if in future)
             first_day = week_data.sort_values("DayNum").iloc[0]
-            calculated_date = first_day["Date"] + timedelta(days=int(current_day_num - first_day["DayNum"]))
+            anchor_val = first_day["Date"]
+            anchor_num = first_day["DayNum"]
+        
+        # FINAL SAFETY: Force anchor_val to be a date object
+        if isinstance(anchor_val, str):
+            anchor_val = datetime.strptime(anchor_val, "%Y-%m-%d").date()
+        
+        calculated_date = anchor_val + timedelta(days=int(current_day_num - anchor_num))
     else:
         calculated_date = date.today()
 
@@ -128,7 +134,7 @@ if st.button("💾 Lock Date", disabled=not can_edit):
 
 st.divider()
 
-# ---------------- EXERCISES (Auto-Save) ----------------
+# ---------------- EXERCISES ----------------
 st.subheader(f"Exercises: {day}")
 for ex in workout_plan[day]:
     if ex in abs_exercises: continue
@@ -140,23 +146,19 @@ for ex in workout_plan[day]:
             saved_row = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] == s)]
             
             if not saved_row.empty: 
-                val = float(saved_row["Weight"].iloc[0])
-                label = "✅"
+                val = float(saved_row["Weight"].iloc[0]); label = "✅"
             elif key in st.session_state: 
-                val = st.session_state[key]
-                label = "⏳"
+                val = st.session_state[key]; label = "⏳"
             elif last_weight_seen is not None: 
-                val = last_weight_seen
-                label = "👉"
+                val = last_weight_seen; label = "👉"
             else: 
-                val = 5.0
-                label = ""
+                val = 5.0; label = ""
 
             idx = max(0, min(int(val / 2.5) - 1, 59))
             st.selectbox(f"Set {s} (lb) {label}", [i*2.5 for i in range(1, 61)], index=idx, key=key, disabled=not can_edit, on_change=on_weight_change, args=(week, day, day_date, ex, s, sets_count, key))
             last_weight_seen = st.session_state[key] if key in st.session_state else val
 
-# ---------------- ABS SECTION (Side-by-Side) ----------------
+# ---------------- ABS SECTION ----------------
 if any(ex in abs_exercises for ex in workout_plan[day]):
     with st.expander("💪 Abs Section"):
         for set_num in [1, 2]:
@@ -175,7 +177,6 @@ if any(ex in abs_exercises for ex in workout_plan[day]):
                         new_abs = pd.DataFrame({"Week":[week], "Day":[day], "Date":[day_date], "Exercise":[ex], "Set":[set_num], "Weight":[0.0], "Duration":[st.session_state[dur_key]]})
                         save_data(pd.concat([df_abs, new_abs], ignore_index=True))
                         st.rerun()
-                st.write("")
 
 # ---------------- SUMMARY ----------------
 st.divider()
