@@ -93,43 +93,40 @@ c_w, c_d = st.columns(2)
 with c_w: week = st.selectbox("Week", [1, 2, 3, 4])
 with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 
-# --- SMART DATE CASCADING LOGIC ---
+# --- UPDATED SMART DATE CASCADING ---
 current_day_num = int(day.split()[-1])
 existing_dates = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "Date"]
 
 if not existing_dates.empty:
     calculated_date = existing_dates.iloc[0]
 else:
-    # Look for the CLOSEST PREVIOUS day in the current week that has a date
+    # Look for the CLOSEST day in the week (prioritizing previous days)
     week_data = log_df[log_df["Week"] == week].copy()
     if not week_data.empty:
-        # Extract day number for sorting/comparison
         week_data["DayNum"] = week_data["Day"].apply(lambda x: int(x.split()[-1]))
-        # Filter for days earlier than current selection
+        
+        # Check for any logged days before current selection
         prev_days = week_data[week_data["DayNum"] < current_day_num].sort_values("DayNum", ascending=False)
         
         if not prev_days.empty:
-            # Anchor to the most recent previous logged day
-            anchor_row = prev_days.iloc[0]
-            ref_date = anchor_row["Date"]
-            ref_day_num = anchor_row["DayNum"]
-            calculated_date = ref_date + timedelta(days=(current_day_num - ref_day_num))
+            anchor = prev_days.iloc[0]
+            calculated_date = anchor["Date"] + timedelta(days=(current_day_num - anchor["DayNum"]))
         else:
-            # If no previous days, check future days to anchor backwards, or default to today
-            all_days = week_data.sort_values("DayNum")
-            anchor_row = all_days.iloc[0]
-            ref_date = anchor_row["Date"]
-            ref_day_num = anchor_row["DayNum"]
-            calculated_date = ref_date + timedelta(days=(current_day_num - ref_day_num))
+            # If no previous days, anchor to the first logged day of the week (even if it's in the future)
+            first_day = week_data.sort_values("DayNum").iloc[0]
+            calculated_date = first_day["Date"] + timedelta(days=(current_day_num - first_day["DayNum"]))
     else:
         calculated_date = date.today()
 
 day_date = st.date_input("Workout Date", value=calculated_date, key=f"dt_{week}_{day}", disabled=not can_edit)
 
 if st.button("💾 Lock Date", disabled=not can_edit):
+    # This creates a "Marker" row so the date is remembered even if no sets are saved yet
     marker = pd.DataFrame({"Week": [week], "Day": [day], "Date": [day_date], "Exercise": ["DAY MARKER"], "Set": [0], "Weight": [0.0], "Duration": [0]})
-    save_data(pd.concat([log_df, marker], ignore_index=True).drop_duplicates(subset=["Week", "Day", "Exercise", "Set"], keep="last"))
-    st.success(f"Date anchored to {day_date}")
+    # Clean up any existing records for this week/day/marker and append new date
+    new_log = pd.concat([log_df, marker], ignore_index=True).drop_duplicates(subset=["Week", "Day", "Exercise", "Set"], keep="last")
+    save_data(new_log)
+    st.success(f"Date anchored. Future days will now offset from {day_date}.")
     st.rerun()
 
 st.divider()
@@ -145,10 +142,18 @@ for ex in workout_plan[day]:
             key = f"input_{week}_{day}_{ex}_{s}"
             saved_row = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] == s)]
             
-            if not saved_row.empty: val = float(saved_row["Weight"].iloc[0]); label = "✅"
-            elif key in st.session_state: val = st.session_state[key]; label = "⏳"
-            elif last_weight_seen is not None: val = last_weight_seen; label = "👉"
-            else: val = 5.0; label = ""
+            if not saved_row.empty: 
+                val = float(saved_row["Weight"].iloc[0])
+                label = "✅"
+            elif key in st.session_state: 
+                val = st.session_state[key]
+                label = "⏳"
+            elif last_weight_seen is not None: 
+                val = last_weight_seen
+                label = "👉"
+            else: 
+                val = 5.0
+                label = ""
 
             idx = max(0, min(int(val / 2.5) - 1, 59))
             st.selectbox(f"Set {s} (lb) {label}", [i*2.5 for i in range(1, 61)], index=idx, key=key, disabled=not can_edit, on_change=on_weight_change, args=(week, day, day_date, ex, s, sets_count, key))
