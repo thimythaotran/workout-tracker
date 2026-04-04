@@ -18,7 +18,8 @@ workout_plan = {
     "Day 7": ["Abs Crunches","Plank","Leg Raises","Russian Twists","Mountain Climber Twists","Flutter Kicks"]
 }
 
-abs_exercises = ["Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks","Abs Crunches","Plank","Leg Raises"]
+# Master list of what counts as an "Abs" exercise
+ABS_MASTER_LIST = ["Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks","Abs Crunches","Plank","Leg Raises"]
 
 # ---------------- DATA ENGINE ----------------
 def load_data():
@@ -68,6 +69,7 @@ saved_date_row = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "
 if not saved_date_row.empty:
     calculated_date = saved_date_row.iloc[0]
 else:
+    # Finding an anchor for the date calculation
     if not log_df.empty:
         log_copy = log_df.copy()
         log_copy["DayNum"] = log_copy["Day"].str.extract('(\d+)').astype(int)
@@ -98,48 +100,50 @@ if st.button(button_label, disabled=not can_edit or already_synced):
                     marker = pd.DataFrame([{"Week": w_idx, "Day": d_name, "Date": new_d, "Exercise": "DAY MARKER", "Set": 0, "Weight": 0.0, "Duration": 0}])
                     log_df = pd.concat([log_df, marker], ignore_index=True)
     save_data(log_df)
-    st.toast("Entire schedule updated!", icon="✅")
+    st.toast("Schedule Updated!", icon="✅")
     st.rerun()
 
 st.divider()
 
-# ---------------- EXERCISES ----------------
-st.subheader(f"Exercises: {day}")
-for ex in workout_plan[day]:
-    if ex in abs_exercises: continue
-    with st.expander(ex):
-        sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
-        last_val = 5.0
-        for s in range(1, sets_count + 1):
-            key = f"input_{week}_{day}_{ex}_{s}"
-            saved = log_df[(log_df["Week"]==week) & (log_df["Day"]==day) & (log_df["Exercise"]==ex) & (log_df["Set"]==s)]
-            val = float(saved["Weight"].iloc[0]) if not saved.empty else (st.session_state[key] if key in st.session_state else last_val)
-            st.selectbox(f"Set {s} (lb) {'✅' if not saved.empty else ''}", [i*2.5 for i in range(1, 61)], index=max(0, min(int(val / 2.5) - 1, 59)), key=key, 
-                         disabled=not can_edit, on_change=on_weight_change, args=(week, day, day_date, ex, s, sets_count, key))
-            last_val = st.session_state[key]
+# Split exercises for today into two lists
+today_exercises = workout_plan[day]
+gym_ex = [e for e in today_exercises if e not in ABS_MASTER_LIST]
+abs_ex = [e for e in today_exercises if e in ABS_MASTER_LIST]
 
-# ---------------- ABS SECTION (FIXED LABELS) ----------------
-if any(ex in abs_exercises for ex in workout_plan[day]):
-    with st.expander("💪 Abs Section", expanded=True):
+# ---------------- GYM EXERCISES ----------------
+if gym_ex:
+    st.subheader("🏋️ Gym Exercises")
+    for ex in gym_ex:
+        with st.expander(ex):
+            sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
+            last_val = 5.0
+            for s in range(1, sets_count + 1):
+                key = f"input_{week}_{day}_{ex}_{s}"
+                saved = log_df[(log_df["Week"]==week) & (log_df["Day"]==day) & (log_df["Exercise"]==ex) & (log_df["Set"]==s)]
+                val = float(saved["Weight"].iloc[0]) if not saved.empty else (st.session_state[key] if key in st.session_state else last_val)
+                st.selectbox(f"Set {s} (lb) {'✅' if not saved.empty else ''}", [i*2.5 for i in range(1, 61)], index=max(0, min(int(val / 2.5) - 1, 59)), key=key, 
+                             disabled=not can_edit, on_change=on_weight_change, args=(week, day, day_date, ex, s, sets_count, key))
+                last_val = st.session_state[key]
+
+# ---------------- ABS SECTION ----------------
+if abs_ex:
+    st.divider()
+    st.subheader("💪 Abs Section")
+    with st.expander("View Abs Routine", expanded=True):
         for set_num in [1, 2]:
-            st.markdown(f"#### Set {set_num}")
-            for ex in workout_plan[day]:
-                if ex not in abs_exercises: continue
-                
-                # Check if this specific set is already saved
+            st.markdown(f"**Set {set_num}**")
+            for ex in abs_ex:
                 saved_abs = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] == set_num)]
                 is_done = not saved_abs.empty
-                
                 dur_key = f"abs_{week}_{day}_{ex}_{set_num}"
                 
                 c1, c2 = st.columns([3, 1.5]) 
                 with c1:
-                    # Show exercise name clearly
                     st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), index=6, key=dur_key, disabled=not can_edit)
                 with c2:
-                    st.write(" ") # Spacer for alignment
+                    st.write(" ") # Padding for desktop view
                     st.write(" ")
-                    if st.button("✅" if is_done else "Save", key=f"btn_abs_{dur_key}", disabled=not can_edit, use_container_width=True):
+                    if st.button("✅" if is_done else "Save", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
                         df_abs = load_data()
                         df_abs = df_abs[~((df_abs["Week"]==week) & (df_abs["Day"]==day) & (df_abs["Exercise"]==ex) & (df_abs["Set"]==set_num))]
                         new_abs = pd.DataFrame([{"Week":week, "Day":day, "Date":day_date, "Exercise":ex, "Set":set_num, "Weight":0.0, "Duration":st.session_state[dur_key]}])
@@ -157,4 +161,4 @@ if not summary_view.empty:
     display_df["Performance"] = display_df.apply(lambda r: f"{r['Weight']} lb" if r["Weight"] > 0 else f"{r['Duration']} sec", axis=1)
     st.dataframe(display_df[["Exercise", "Set", "Performance"]], use_container_width=True, hide_index=True)
 else:
-    st.info("No exercises logged for today yet.")
+    st.info("No exercises logged for today.")
