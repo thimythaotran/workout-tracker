@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
@@ -75,7 +75,6 @@ def on_weight_change(week, day, date_val, exercise, set_num, total_sets, key):
 # ---------------- APP UI ----------------
 st.set_page_config(page_title="Workout Tracker", layout="centered")
 
-# Refresh Header
 col_ref, col_stat = st.columns([1, 2])
 with col_ref:
     if st.button("🔄 Refresh"):
@@ -94,12 +93,43 @@ c_w, c_d = st.columns(2)
 with c_w: week = st.selectbox("Week", [1, 2, 3, 4])
 with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 
+# --- SMART DATE CASCADING LOGIC ---
+current_day_num = int(day.split()[-1])
 existing_dates = log_df.loc[(log_df["Week"] == week) & (log_df["Day"] == day), "Date"]
-day_date = st.date_input("Workout Date", value=existing_dates.iloc[0] if not existing_dates.empty else date.today(), key=f"dt_{week}_{day}", disabled=not can_edit)
+
+if not existing_dates.empty:
+    calculated_date = existing_dates.iloc[0]
+else:
+    # Look for the CLOSEST PREVIOUS day in the current week that has a date
+    week_data = log_df[log_df["Week"] == week].copy()
+    if not week_data.empty:
+        # Extract day number for sorting/comparison
+        week_data["DayNum"] = week_data["Day"].apply(lambda x: int(x.split()[-1]))
+        # Filter for days earlier than current selection
+        prev_days = week_data[week_data["DayNum"] < current_day_num].sort_values("DayNum", ascending=False)
+        
+        if not prev_days.empty:
+            # Anchor to the most recent previous logged day
+            anchor_row = prev_days.iloc[0]
+            ref_date = anchor_row["Date"]
+            ref_day_num = anchor_row["DayNum"]
+            calculated_date = ref_date + timedelta(days=(current_day_num - ref_day_num))
+        else:
+            # If no previous days, check future days to anchor backwards, or default to today
+            all_days = week_data.sort_values("DayNum")
+            anchor_row = all_days.iloc[0]
+            ref_date = anchor_row["Date"]
+            ref_day_num = anchor_row["DayNum"]
+            calculated_date = ref_date + timedelta(days=(current_day_num - ref_day_num))
+    else:
+        calculated_date = date.today()
+
+day_date = st.date_input("Workout Date", value=calculated_date, key=f"dt_{week}_{day}", disabled=not can_edit)
 
 if st.button("💾 Lock Date", disabled=not can_edit):
     marker = pd.DataFrame({"Week": [week], "Day": [day], "Date": [day_date], "Exercise": ["DAY MARKER"], "Set": [0], "Weight": [0.0], "Duration": [0]})
     save_data(pd.concat([log_df, marker], ignore_index=True).drop_duplicates(subset=["Week", "Day", "Exercise", "Set"], keep="last"))
+    st.success(f"Date anchored to {day_date}")
     st.rerun()
 
 st.divider()
@@ -131,11 +161,8 @@ if any(ex in abs_exercises for ex in workout_plan[day]):
             st.write(f"**Set {set_num}**")
             for ex in workout_plan[day]:
                 if ex not in abs_exercises: continue
-                
                 is_done = not log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] == set_num)].empty
                 dur_key = f"abs_{week}_{day}_{ex}_{set_num}"
-                
-                # SIDE BY SIDE LAYOUT
                 c1, c2 = st.columns([4, 1.2]) 
                 with c1:
                     st.selectbox(f"{ex} (sec)", list(range(0, 125, 5)), index=6, key=dur_key, disabled=not can_edit, label_visibility="collapsed")
@@ -146,7 +173,7 @@ if any(ex in abs_exercises for ex in workout_plan[day]):
                         new_abs = pd.DataFrame({"Week":[week], "Day":[day], "Date":[day_date], "Exercise":[ex], "Set":[set_num], "Weight":[0.0], "Duration":[st.session_state[dur_key]]})
                         save_data(pd.concat([df_abs, new_abs], ignore_index=True))
                         st.rerun()
-                st.write("") # Tiny spacer
+                st.write("")
 
 # ---------------- SUMMARY ----------------
 st.divider()
