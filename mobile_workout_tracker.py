@@ -1,5 +1,5 @@
-# VERSION: 2.03
-# STATUS: Phase 2 - Summary optimization for 0-rep sets
+# VERSION: 2.04
+# STATUS: Phase 2 - Added "Copy Set 1 to All" logic
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-VERSION = "2.03" 
+VERSION = "2.04" 
 
 workout_plan = {
     "Day 1": ["Flat Bench Press","Incline Bench Press","Cable Flies","Cable Tricep Extensions","Skull Crushers","Dips","Push Ups","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
@@ -49,6 +49,33 @@ def on_data_change(week, day, date_val, exercise, set_num, weight_key, reps_key)
     }])
     save_data(pd.concat([df, new_row], ignore_index=True))
 
+def duplicate_set_one(week, day, date_val, exercise, total_sets):
+    """Copies Set 1 values to all other sets in the CSV."""
+    w1_key = f"weight_{week}_{day}_{exercise}_1"
+    r1_key = f"reps_{week}_{day}_{exercise}_1"
+    
+    if w1_key in st.session_state and r1_key in st.session_state:
+        val_w = float(st.session_state[w1_key])
+        val_r = int(st.session_state[r1_key])
+        
+        df = load_data()
+        # Remove all existing sets for this exercise today
+        df = df[~((df["Week"] == week) & (df["Day"] == day) & (df["Exercise"] == exercise) & (df["Set"] > 0))]
+        
+        # Create the new rows
+        new_rows = []
+        for s in range(1, total_sets + 1):
+            new_rows.append({
+                "Week": week, "Day": day, "Date": date_val, "Exercise": exercise,
+                "Set": s, "Weight": val_w, "Reps": val_r, "Duration": 0
+            })
+            # Also update session state so UI reflects change immediately
+            st.session_state[f"weight_{week}_{day}_{exercise}_{s}"] = val_w
+            st.session_state[f"reps_{week}_{day}_{exercise}_{s}"] = val_r
+            
+        df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
+        save_data(df)
+
 # ---------------- APP UI ----------------
 st.set_page_config(page_title="Workout Tracker", layout="centered")
 
@@ -73,7 +100,6 @@ saved_marker = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_d
 day_date = st.date_input("Workout Date", value=saved_marker.iloc[0]["Date"] if not saved_marker.empty else date.today(), disabled=not can_edit)
 
 st.divider()
-
 today_data = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
 gym_ex = [e for e in workout_plan[day] if e not in ABS_MASTER_LIST]
 abs_ex = [e for e in workout_plan[day] if e in ABS_MASTER_LIST]
@@ -95,8 +121,15 @@ for ex in gym_ex:
         show_timer(f"gym_{ex}") 
         st.divider()
         
-        sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
-        
+        c_sets, c_copy = st.columns([1, 1.5])
+        with c_sets:
+            sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
+        with c_copy:
+            st.write("") # Alignment
+            if st.button("👯 Copy Set 1 to All", key=f"copy_{week}_{day}_{ex}", disabled=not can_edit, use_container_width=True):
+                duplicate_set_one(week, day, day_date, ex, sets_count)
+                st.rerun()
+
         h1, h2, h3 = st.columns([1, 2, 2])
         h1.caption("Set")
         h2.caption("Weight (lb)")
@@ -136,7 +169,6 @@ if abs_ex:
                 with c1: st.selectbox(f"Secs", list(range(0, 125, 5)), index=int(s_dur/5), key=dur_key, disabled=not can_edit)
                 with c2: st.selectbox(f"Reps", list(range(0, 51)), index=s_reps, key=reps_key, disabled=not can_edit)
                 with c3:
-                    st.write("")
                     if st.button("💾", key=f"btn_{dur_key}", disabled=not can_edit, use_container_width=True):
                         df_s = load_data()
                         df_s = df_s[~((df_s["Week"]==week) & (df_s["Day"]==day) & (df_s["Exercise"]==ex) & (df_s["Set"]==set_num))]
@@ -150,7 +182,6 @@ st.subheader("📊 Summary")
 summary_view = today_data[today_data["Exercise"] != "DAY MARKER"]
 if not summary_view.empty:
     display_df = summary_view.sort_values(by=["Exercise", "Set"]).copy()
-    # If Reps are 0, we label it as '-' in summary to keep it clean
     display_df["Performance"] = display_df.apply(lambda r: f"{r['Weight']} lb x {r['Reps']}" if r["Weight"] > 0 and r["Reps"] > 0 else (f"{r['Duration']}s | {r['Reps']}R" if r['Weight'] == 0 else "—"), axis=1)
     st.dataframe(display_df[["Exercise", "Set", "Performance"]], use_container_width=True, hide_index=True)
 
