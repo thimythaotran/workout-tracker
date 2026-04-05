@@ -1,6 +1,6 @@
 # VERSION: 2.09
 
-# STATUS: Streamlit Cloud Compatible
+# STATUS: Streamlit Cloud Compatible - Optimized
 
 # ––––––––––––––––––––––––––––––––
 
@@ -13,8 +13,8 @@ from datetime import date
 # –––––––– SETTINGS ––––––––
 
 DATA_FILE = “workout_log.csv”
-VERSION = “2.09”
 EDIT_PASSWORD = os.environ.get(“WORKOUT_PASSWORD”, “1”)
+VERSION = “2.09”
 
 REQUIRED_COLUMNS = [“Week”, “Day”, “Date”, “Exercise”, “Set”, “Weight”, “Reps”, “Duration”]
 
@@ -120,16 +120,14 @@ save_data(pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True))
 invalidate_cache()
 ensure_day_marker(week, day, date_val)
 
-# –––––––– TIMER (st.fragment so only timer reruns, not whole app) ––––––––
+# –––––––– TIMER ––––––––
 
-def init_timer():
-st.session_state.setdefault(“timer_start”, None)
-st.session_state.setdefault(“timer_running”, False)
+# Uses st.fragment so only the timer reruns every second, not the whole app
 
 @st.fragment(run_every=1)
 def show_timer(key_suffix):
 elapsed = 0
-if st.session_state[“timer_running”] and st.session_state[“timer_start”]:
+if st.session_state.get(“timer_running”) and st.session_state.get(“timer_start”):
 elapsed = int(time.time() - st.session_state[“timer_start”])
 
 ```
@@ -158,10 +156,12 @@ with t_c2:
         st.rerun(scope="fragment")
 ```
 
-# –––––––– APP ––––––––
+# –––––––– APP UI ––––––––
 
 st.set_page_config(page_title=“Workout Tracker”, layout=“centered”)
-init_timer()
+
+st.session_state.setdefault(“timer_start”, None)
+st.session_state.setdefault(“timer_running”, False)
 
 col_ref, col_ver = st.columns([1, 2])
 with col_ref:
@@ -266,7 +266,7 @@ st.divider()
             )
 ```
 
-# –––––––– ABS SECTION (manual save - unchanged per spec) ––––––––
+# –––––––– ABS SECTION (manual save unchanged) ––––––––
 
 if abs_ex:
 with st.expander(“Abs Section”, expanded=False):
@@ -296,10 +296,19 @@ s_reps = int(saved_abs[“Reps”].iloc[0]) if not saved_abs.empty else 10
                 )
             with c3:
                 if st.button("Save", key="btn_" + dur_key, disabled=not can_edit, use_container_width=True):
-                    upsert_row(
-                        week, day, day_date, ex, set_num, 0.0,
-                        st.session_state[reps_key], st.session_state[dur_key]
-                    )
+                    df_s = load_data()
+                    df_s = df_s[~(
+                        (df_s["Week"] == week) & (df_s["Day"] == day) &
+                        (df_s["Exercise"] == ex) & (df_s["Set"] == set_num)
+                    )]
+                    new_r = pd.DataFrame([{
+                        "Week": week, "Day": day, "Date": day_date, "Exercise": ex,
+                        "Set": set_num, "Weight": 0.0,
+                        "Reps": st.session_state[reps_key],
+                        "Duration": st.session_state[dur_key]
+                    }])
+                    save_data(pd.concat([df_s, new_r], ignore_index=True))
+                    invalidate_cache()
                     ensure_day_marker(week, day, day_date)
                     st.rerun()
         st.divider()
