@@ -1,5 +1,5 @@
-# VERSION: 2.02
-# STATUS: Phase 2 - Trigger-based CSV Purge
+# VERSION: 2.03
+# STATUS: Phase 2 - Summary optimization for 0-rep sets
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-VERSION = "2.02" 
+VERSION = "2.03" 
 
 workout_plan = {
     "Day 1": ["Flat Bench Press","Incline Bench Press","Cable Flies","Cable Tricep Extensions","Skull Crushers","Dips","Push Ups","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
@@ -48,18 +48,6 @@ def on_data_change(week, day, date_val, exercise, set_num, weight_key, reps_key)
         "Set": set_num, "Weight": float(st.session_state[weight_key]), "Reps": int(st.session_state[reps_key]), "Duration": 0
     }])
     save_data(pd.concat([df, new_row], ignore_index=True))
-
-def purge_extra_sets(week, day, exercise, set_limit):
-    """Instantly kills sets from CSV that are higher than the UI limit."""
-    df = load_data()
-    mask = (df["Week"] == week) & (df["Day"] == day) & (df["Exercise"] == exercise) & (df["Set"] > set_limit)
-    if mask.any():
-        df = df[~mask]
-        save_data(df)
-        # Wipe session state so re-adding them starts fresh
-        for s in range(set_limit + 1, 11):
-            st.session_state.pop(f"weight_{week}_{day}_{exercise}_{s}", None)
-            st.session_state.pop(f"reps_{week}_{day}_{exercise}_{s}", None)
 
 # ---------------- APP UI ----------------
 st.set_page_config(page_title="Workout Tracker", layout="centered")
@@ -107,12 +95,7 @@ for ex in gym_ex:
         show_timer(f"gym_{ex}") 
         st.divider()
         
-        # This trigger runs IMMEDIATELY when you click the minus/plus buttons
-        sets_count = st.number_input(f"Sets", 1, 10, 4, 
-                                     key=f"sets_{week}_{day}_{ex}", 
-                                     disabled=not can_edit,
-                                     on_change=purge_extra_sets,
-                                     args=(week, day, ex, st.session_state.get(f"sets_{week}_{day}_{ex}", 4)))
+        sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
         
         h1, h2, h3 = st.columns([1, 2, 2])
         h1.caption("Set")
@@ -167,7 +150,8 @@ st.subheader("📊 Summary")
 summary_view = today_data[today_data["Exercise"] != "DAY MARKER"]
 if not summary_view.empty:
     display_df = summary_view.sort_values(by=["Exercise", "Set"]).copy()
-    display_df["Performance"] = display_df.apply(lambda r: f"{r['Weight']} lb x {r['Reps']}" if r["Weight"] > 0 else f"{r['Duration']}s | {r['Reps']}R", axis=1)
+    # If Reps are 0, we label it as '-' in summary to keep it clean
+    display_df["Performance"] = display_df.apply(lambda r: f"{r['Weight']} lb x {r['Reps']}" if r["Weight"] > 0 and r["Reps"] > 0 else (f"{r['Duration']}s | {r['Reps']}R" if r['Weight'] == 0 else "—"), axis=1)
     st.dataframe(display_df[["Exercise", "Set", "Performance"]], use_container_width=True, hide_index=True)
 
 if st.session_state["timer_running"]:
