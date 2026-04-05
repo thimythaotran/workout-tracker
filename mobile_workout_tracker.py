@@ -101,8 +101,7 @@ def show_timer(key_suffix):
     with t_c1:
         elapsed = int(time.time() - st.session_state["timer_start"]) if (st.session_state["timer_running"] and st.session_state["timer_start"]) else 0
         # High Visibility Red Timer Logic
-        st.markdown(f"<h1 style='color: #FF0000; text-align: left; font-size: 50px; margin-bottom: 0px;'>⏱️ {elapsed}s</h1>", unsafe_allow_html=True)
-        st.caption("RESTING")
+        st.markdown(f"<h1 style='color: #FF0000; text-align: left; font-size: 50px; margin-bottom: 0px;'>⏱️ {elapsed}s Resting</h1>", unsafe_allow_html=True)
     with t_c2:
         st.write("") # Spacer
         if st.button("RESET", key=f"reset_{key_suffix}", use_container_width=True):
