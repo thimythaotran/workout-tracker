@@ -1,5 +1,5 @@
-# VERSION: 2.06
-# STATUS: Phase 2 - High-Visibility Red Timer
+# VERSION: 2.07
+# STATUS: Phase 2 - Multi-Color High-Vis Timer
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-VERSION = "2.06" 
+VERSION = "2.07" 
 
 workout_plan = {
     "Day 1": ["Flat Bench Press","Incline Bench Press","Cable Flies","Cable Tricep Extensions","Skull Crushers","Dips","Push Ups","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
@@ -100,8 +100,14 @@ def show_timer(key_suffix):
     t_c1, t_c2 = st.columns([3, 1.2])
     with t_c1:
         elapsed = int(time.time() - st.session_state["timer_start"]) if (st.session_state["timer_running"] and st.session_state["timer_start"]) else 0
-        # High Visibility Red Timer Logic
-        st.markdown(f"<h1 style='color: #FF0000; text-align: left; font-size: 50px; margin-bottom: 0px;'>⏱️ {elapsed}s Resting</h1>", unsafe_allow_html=True)
+        # Split style: Big Red Timer, Smaller Green Label
+        timer_html = f"""
+            <div style="display: flex; align-items: baseline; gap: 10px;">
+                <span style="color: #FF0000; font-size: 55px; font-weight: bold; font-family: monospace;">{elapsed}s</span>
+                <span style="color: #28a745; font-size: 25px; font-weight: bold;">Resting</span>
+            </div>
+        """
+        st.markdown(timer_html, unsafe_allow_html=True)
     with t_c2:
         st.write("") # Spacer
         if st.button("RESET", key=f"reset_{key_suffix}", use_container_width=True):
