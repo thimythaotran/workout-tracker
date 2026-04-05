@@ -1,6 +1,6 @@
-# VERSION: 2.08
+# VERSION: 2.09
 
-# STATUS: Phase 3 - Optimized & Robust
+# STATUS: Streamlit Cloud Compatible
 
 # ––––––––––––––––––––––––––––––––
 
@@ -13,10 +13,7 @@ from datetime import date
 # –––––––– SETTINGS ––––––––
 
 DATA_FILE = “workout_log.csv”
-VERSION = “2.08”
-
-# Password: set env var WORKOUT_PASSWORD for deployment, falls back to “1” locally
-
+VERSION = “2.09”
 EDIT_PASSWORD = os.environ.get(“WORKOUT_PASSWORD”, “1”)
 
 REQUIRED_COLUMNS = [“Week”, “Day”, “Date”, “Exercise”, “Set”, “Weight”, “Reps”, “Duration”]
@@ -106,7 +103,10 @@ raw_w = st.session_state[w1_key]
 val_w = 0.0 if raw_w == “Bodyweight” else float(raw_w)
 val_r = int(st.session_state[r1_key])
 df = load_data()
-mask = (df[“Week”] == week) & (df[“Day”] == day) & (df[“Exercise”] == exercise) & (df[“Set”] > 0)
+mask = (
+(df[“Week”] == week) & (df[“Day”] == day) &
+(df[“Exercise”] == exercise) & (df[“Set”] > 0)
+)
 df = df[~mask]
 new_rows = []
 for s in range(1, total_sets + 1):
@@ -120,28 +120,28 @@ save_data(pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True))
 invalidate_cache()
 ensure_day_marker(week, day, date_val)
 
-# –––––––– TIMER ––––––––
+# –––––––– TIMER (st.fragment so only timer reruns, not whole app) ––––––––
 
 def init_timer():
 st.session_state.setdefault(“timer_start”, None)
 st.session_state.setdefault(“timer_running”, False)
-st.session_state.setdefault(“timer_last_tick”, 0.0)
 
+@st.fragment(run_every=1)
 def show_timer(key_suffix):
-t_c1, t_c2 = st.columns([3, 1.2])
-with t_c1:
 elapsed = 0
 if st.session_state[“timer_running”] and st.session_state[“timer_start”]:
 elapsed = int(time.time() - st.session_state[“timer_start”])
 
 ```
-    if elapsed < 60:
-        color = "#28a745"
-    elif elapsed < 90:
-        color = "#ffc107"
-    else:
-        color = "#FF0000"
+if elapsed < 60:
+    color = "#28a745"
+elif elapsed < 90:
+    color = "#ffc107"
+else:
+    color = "#FF0000"
 
+t_c1, t_c2 = st.columns([3, 1.2])
+with t_c1:
     timer_html = (
         "<div style='display:flex; align-items:baseline; gap:10px;'>"
         "<span style='color:" + color + "; font-size:55px; font-weight:bold; font-family:monospace;'>"
@@ -150,17 +150,15 @@ elapsed = int(time.time() - st.session_state[“timer_start”])
         "</div>"
     )
     st.markdown(timer_html, unsafe_allow_html=True)
-
 with t_c2:
     st.write("")
     if st.button("RESET", key="reset_" + key_suffix, use_container_width=True):
         st.session_state["timer_start"] = time.time()
         st.session_state["timer_running"] = True
-        st.session_state["timer_last_tick"] = time.time()
-        st.rerun()
+        st.rerun(scope="fragment")
 ```
 
-# –––––––– APP UI ––––––––
+# –––––––– APP ––––––––
 
 st.set_page_config(page_title=“Workout Tracker”, layout=“centered”)
 init_timer()
@@ -177,6 +175,7 @@ password = st.text_input(“Enter password”, type=“password”)
 can_edit = password == EDIT_PASSWORD
 
 log_df = get_data()
+
 c_w, c_d = st.columns(2)
 with c_w:
 week = st.selectbox(“Week”, [1, 2, 3, 4])
@@ -208,16 +207,26 @@ for ex in gym_ex:
 with st.expander(ex):
 show_timer(“gym_” + ex)
 st.divider()
-c_sets, c_copy = st.columns([1, 1.5])
-with c_sets:
-sets_count = st.number_input(“Sets”, 1, 10, 4, key=“sets_” + str(week) + “*” + day + “*” + ex, disabled=not can_edit)
-with c_copy:
-st.write(””)
-if st.button(“Copy Set 1 to All”, key=“copy_” + str(week) + “*” + day + “*” + ex, disabled=not can_edit, use_container_width=True):
-duplicate_set_one(week, day, day_date, ex, sets_count)
-st.rerun()
 
 ```
+    c_sets, c_copy = st.columns([1, 1.5])
+    with c_sets:
+        sets_count = st.number_input(
+            "Sets", 1, 10, 4,
+            key="sets_" + str(week) + "_" + day + "_" + ex,
+            disabled=not can_edit
+        )
+    with c_copy:
+        st.write("")
+        if st.button(
+            "Copy Set 1 to All",
+            key="copy_" + str(week) + "_" + day + "_" + ex,
+            disabled=not can_edit,
+            use_container_width=True
+        ):
+            duplicate_set_one(week, day, day_date, ex, sets_count)
+            st.rerun()
+
     h1, h2, h3 = st.columns([1, 2, 2])
     h1.caption("Set")
     h2.caption("Weight")
@@ -242,15 +251,19 @@ st.rerun()
         with c1:
             st.write("**" + str(s) + "** " + ("✅" if not saved.empty else ""))
         with c2:
-            st.selectbox("W", weight_options, index=w_idx, key=w_key,
-                         disabled=not can_edit, label_visibility="collapsed",
-                         on_change=on_data_change,
-                         args=(week, day, day_date, ex, s, w_key, r_key))
+            st.selectbox(
+                "W", weight_options, index=w_idx, key=w_key,
+                disabled=not can_edit, label_visibility="collapsed",
+                on_change=on_data_change,
+                args=(week, day, day_date, ex, s, w_key, r_key)
+            )
         with c3:
-            st.selectbox("R", list(range(0, 51)), index=s_reps, key=r_key,
-                         disabled=not can_edit, label_visibility="collapsed",
-                         on_change=on_data_change,
-                         args=(week, day, day_date, ex, s, w_key, r_key))
+            st.selectbox(
+                "R", list(range(0, 51)), index=s_reps, key=r_key,
+                disabled=not can_edit, label_visibility="collapsed",
+                on_change=on_data_change,
+                args=(week, day, day_date, ex, s, w_key, r_key)
+            )
 ```
 
 # –––––––– ABS SECTION (manual save - unchanged per spec) ––––––––
@@ -260,24 +273,37 @@ with st.expander(“Abs Section”, expanded=False):
 for set_num in [1, 2]:
 st.markdown(”#### SET “ + str(set_num))
 for ex in abs_ex:
-saved_abs = today_data[(today_data[“Exercise”] == ex) & (today_data[“Set”] == set_num)]
+saved_abs = today_data[
+(today_data[“Exercise”] == ex) & (today_data[“Set”] == set_num)
+]
 dur_key = “abs_dur_” + str(week) + “*” + day + “*” + ex + “*” + str(set_num)
-reps_key = “abs_reps*” + str(week) + “*” + day + “*” + ex + “*” + str(set_num)
+reps_key = “abs_reps*” + str(week) + “*” + day + “*” + ex + “_” + str(set_num)
 s_dur = int(saved_abs[“Duration”].iloc[0]) if not saved_abs.empty else 30
 s_reps = int(saved_abs[“Reps”].iloc[0]) if not saved_abs.empty else 10
-st.write(”**” + ex + “** “ + (“✅” if not saved_abs.empty else “”))
-c1, c2, c3 = st.columns([2, 2, 1])
-with c1:
-st.selectbox(“Secs”, list(range(0, 125, 5)), index=int(s_dur / 5), key=dur_key, disabled=not can_edit)
-with c2:
-st.selectbox(“Reps”, list(range(0, 51)), index=s_reps, key=reps_key, disabled=not can_edit)
-with c3:
-if st.button(“Save”, key=“btn*” + dur_key, disabled=not can_edit, use_container_width=True):
-upsert_row(week, day, day_date, ex, set_num, 0.0,
-st.session_state[reps_key], st.session_state[dur_key])
-ensure_day_marker(week, day, day_date)
-st.rerun()
-st.divider()
+
+```
+            st.write("**" + ex + "** " + ("✅" if not saved_abs.empty else ""))
+            c1, c2, c3 = st.columns([2, 2, 1])
+            with c1:
+                st.selectbox(
+                    "Secs", list(range(0, 125, 5)),
+                    index=int(s_dur / 5), key=dur_key, disabled=not can_edit
+                )
+            with c2:
+                st.selectbox(
+                    "Reps", list(range(0, 51)),
+                    index=s_reps, key=reps_key, disabled=not can_edit
+                )
+            with c3:
+                if st.button("Save", key="btn_" + dur_key, disabled=not can_edit, use_container_width=True):
+                    upsert_row(
+                        week, day, day_date, ex, set_num, 0.0,
+                        st.session_state[reps_key], st.session_state[dur_key]
+                    )
+                    ensure_day_marker(week, day, day_date)
+                    st.rerun()
+        st.divider()
+```
 
 # –––––––– SUMMARY ––––––––
 
@@ -302,17 +328,11 @@ def format_perf(r):
     return "-"
 
 display_df["Performance"] = display_df.apply(format_perf, axis=1)
-st.dataframe(display_df[["Exercise", "Set", "Performance"]], use_container_width=True, hide_index=True)
+st.dataframe(
+    display_df[["Exercise", "Set", "Performance"]],
+    use_container_width=True, hide_index=True
+)
 ```
 
 else:
 st.caption(“No data logged yet for this day.”)
-
-# –––––––– SMART TIMER TICK ––––––––
-
-if st.session_state[“timer_running”]:
-now = time.time()
-if now - st.session_state.get(“timer_last_tick”, 0) >= 1.0:
-st.session_state[“timer_last_tick”] = now
-time.sleep(max(0, 1.0 - (now % 1)))
-st.rerun()
