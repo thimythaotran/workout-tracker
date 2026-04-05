@@ -1,5 +1,5 @@
-# VERSION: 2.01
-# STATUS: Phase 2 - Instant Purge Logic + Versioning Update
+# VERSION: 2.02
+# STATUS: Phase 2 - Trigger-based CSV Purge
 # ----------------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # ---------------- SETTINGS ----------------
 DATA_FILE = "workout_log.csv"
 EDIT_PASSWORD = "1"
-VERSION = "2.01" 
+VERSION = "2.02" 
 
 workout_plan = {
     "Day 1": ["Flat Bench Press","Incline Bench Press","Cable Flies","Cable Tricep Extensions","Skull Crushers","Dips","Push Ups","Leg Drops","Reverse Leg Crunches","Sit-Up Twists","Russian Twists","Mountain Climber Twists","Flutter Kicks"],
@@ -49,13 +49,24 @@ def on_data_change(week, day, date_val, exercise, set_num, weight_key, reps_key)
     }])
     save_data(pd.concat([df, new_row], ignore_index=True))
 
+def purge_extra_sets(week, day, exercise, set_limit):
+    """Instantly kills sets from CSV that are higher than the UI limit."""
+    df = load_data()
+    mask = (df["Week"] == week) & (df["Day"] == day) & (df["Exercise"] == exercise) & (df["Set"] > set_limit)
+    if mask.any():
+        df = df[~mask]
+        save_data(df)
+        # Wipe session state so re-adding them starts fresh
+        for s in range(set_limit + 1, 11):
+            st.session_state.pop(f"weight_{week}_{day}_{exercise}_{s}", None)
+            st.session_state.pop(f"reps_{week}_{day}_{exercise}_{s}", None)
+
 # ---------------- APP UI ----------------
 st.set_page_config(page_title="Workout Tracker", layout="centered")
 
 if "timer_start" not in st.session_state: st.session_state["timer_start"] = None
 if "timer_running" not in st.session_state: st.session_state["timer_running"] = False
 
-# UI Header
 col_ref, col_ver = st.columns([1, 2])
 with col_ref:
     if st.button("🔄 Refresh"): st.rerun()
@@ -73,33 +84,11 @@ with c_d: day = st.selectbox("Day", list(workout_plan.keys()))
 saved_marker = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == "DAY MARKER")]
 day_date = st.date_input("Workout Date", value=saved_marker.iloc[0]["Date"] if not saved_marker.empty else date.today(), disabled=not can_edit)
 
-# ---------------- PRE-RENDER PURGE ----------------
-current_workout_exercises = workout_plan[day]
-gym_ex = [e for e in current_workout_exercises if e not in ABS_MASTER_LIST]
-abs_ex = [e for e in current_workout_exercises if e in ABS_MASTER_LIST]
-
-purge_needed = False
-for ex in gym_ex:
-    s_key = f"sets_{week}_{day}_{ex}"
-    if s_key in st.session_state:
-        current_ui_limit = st.session_state[s_key]
-        # Check if DB has sets higher than what the UI says
-        over_sets = log_df[(log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] > current_ui_limit)]
-        if not over_sets.empty:
-            log_df = log_df[~((log_df["Week"] == week) & (log_df["Day"] == day) & (log_df["Exercise"] == ex) & (log_df["Set"] > current_ui_limit))]
-            purge_needed = True
-            # Clear internal memory for those ghost sets
-            for s_clear in range(current_ui_limit + 1, 11):
-                st.session_state.pop(f"weight_{week}_{day}_{ex}_{s_clear}", None)
-                st.session_state.pop(f"reps_{week}_{day}_{ex}_{s_clear}", None)
-
-if purge_needed:
-    save_data(log_df)
-    st.rerun() # Force a clean state before showing summary
-
-# ---------------- RENDER ----------------
 st.divider()
+
 today_data = log_df[(log_df["Week"] == week) & (log_df["Day"] == day)]
+gym_ex = [e for e in workout_plan[day] if e not in ABS_MASTER_LIST]
+abs_ex = [e for e in workout_plan[day] if e in ABS_MASTER_LIST]
 
 def show_timer(key_suffix):
     t_c1, t_c2 = st.columns([3, 1.2])
@@ -112,11 +101,18 @@ def show_timer(key_suffix):
             st.session_state["timer_running"] = True
             st.rerun()
 
+# ---------------- GYM EXERCISES ----------------
 for ex in gym_ex:
     with st.expander(ex):
         show_timer(f"gym_{ex}") 
         st.divider()
-        sets_count = st.number_input(f"Sets", 1, 10, 4, key=f"sets_{week}_{day}_{ex}", disabled=not can_edit)
+        
+        # This trigger runs IMMEDIATELY when you click the minus/plus buttons
+        sets_count = st.number_input(f"Sets", 1, 10, 4, 
+                                     key=f"sets_{week}_{day}_{ex}", 
+                                     disabled=not can_edit,
+                                     on_change=purge_extra_sets,
+                                     args=(week, day, ex, st.session_state.get(f"sets_{week}_{day}_{ex}", 4)))
         
         h1, h2, h3 = st.columns([1, 2, 2])
         h1.caption("Set")
@@ -141,6 +137,7 @@ for ex in gym_ex:
                              key=r_key, disabled=not can_edit, label_visibility="collapsed",
                              on_change=on_data_change, args=(week, day, day_date, ex, s, w_key, r_key))
 
+# ---------------- ABS SECTION ----------------
 if abs_ex:
     with st.expander("💪 Abs Section", expanded=False):
         for set_num in [1, 2]:
@@ -148,7 +145,6 @@ if abs_ex:
             for ex in abs_ex:
                 saved_abs = today_data[(today_data["Exercise"] == ex) & (today_data["Set"] == set_num)]
                 dur_key, reps_key = f"abs_dur_{week}_{day}_{ex}_{set_num}", f"abs_reps_{week}_{day}_{ex}_{set_num}"
-                
                 s_dur = int(saved_abs["Duration"].iloc[0]) if not saved_abs.empty else 30
                 s_reps = int(saved_abs["Reps"].iloc[0]) if not saved_abs.empty else 10
                 
@@ -166,6 +162,7 @@ if abs_ex:
                         st.rerun()
             st.divider()
 
+# ---------------- SUMMARY ----------------
 st.subheader("📊 Summary")
 summary_view = today_data[today_data["Exercise"] != "DAY MARKER"]
 if not summary_view.empty:
